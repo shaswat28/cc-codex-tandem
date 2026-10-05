@@ -66,10 +66,12 @@ make install-hooks  # enable .githooks/commit-msg
 
 ## Current state
 
-- T-01 through T-04 merged to `main`: companion, effort ladder, backlog parsing,
-  configuration. 170 tests, 100% coverage, gate green.
-- Next: T-07 (fake companion), then T-05/T-06, then T-08..T-12.
-- T-12 supersedes T-02's binary retry policy with a failure taxonomy.
-- Review after a green gate found defects in three of the first four tickets, so
-  review is a required step, not an optional one.
+- Merged to `main`: T-01 companion, T-02 effort ladder, T-03 backlog, T-04 config,
+  T-05 worktree lifecycle, T-07 fake companion. 237 tests, gate green.
+- Next: T-06 (lane state machine, the last `high`), then T-08 CLI, T-09 verify,
+  T-10 skills, T-11 CI, T-12 failure taxonomy.
+- T-12 supersedes T-02's binary retry policy. T-10 is the highest-risk ticket: the
+  skill prompts decide whether planning and implementation duplicate each other.
+- Coverage sits at 99%; the five uncovered lines in `worktree.py` are fault-injection
+  branches reachable only by corrupting git state mid-command.
 - Blocked: nothing.
