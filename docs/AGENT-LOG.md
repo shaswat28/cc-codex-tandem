@@ -23,3 +23,21 @@ Dated execution history. Appended by the lane runner; not read by default.
   covered by regression tests. Concurrent writers are tested for stale-state rejection.
 - Validation: `make check` passed on Python 3.13.9: lint, formatting, strict types,
   137 tests, 100% coverage. No git commands or real companion calls were run.
+
+## 2026-10-05 — T-05
+
+- Added `WorktreeManager(repo, base=..., worktree_root=...)` with create,
+  commit, sync, merge and remove operations. Merge results identify the operation,
+  ticket and conflict paths. Branches survive conflict and removal.
+- The directory mutex lives in the common git directory so linked checkouts share
+  it. Owner publication is atomic; a short advisory guard prevents contenders
+  racing during stale-owner reclamation. Dead owners are reclaimed with a warning.
+- Review strengthened cleanup around merge invocation, checked lane registrations,
+  selected explicit branch refs to avoid tag ambiguity, and overrode no-commit and
+  fast-forward-only preferences so successful merges finish their intended work.
+- Validation: `make check` passed on Python 3.13.9: lint, formatting, strict types,
+  217 tests (47 new real-git integration tests), 98.60% overall coverage and 96%
+  worktree-module coverage. Tests cover conflict abort, interrupted-merge recovery,
+  branch reuse, idempotent removal and concurrent merge/lock contention.
+- Git operations ran only inside isolated temporary test repositories. No git
+  commands targeted this project checkout; no real companion calls were made.
