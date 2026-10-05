@@ -46,3 +46,25 @@ correctly. The fake never reaches the network.
 Fixture configuration and supported commands: [fake companion guide](../tests/fakes/README.md).
 
 Status: DONE — Offline scriptable companion and isolated fixtures cover all seven scenarios, file edits, retries and job status; 189 tests, 100% Python coverage.
+## T-05: Git worktree lifecycle
+Effort: high
+
+**Scope.** `src/cc_tandem/worktree.py`. Real git, no mocks in the tests.
+
+- `create(ticket, base)` adds a worktree on a new branch, reusing an existing branch
+  if the ticket was attempted before.
+- `commit_all(dir, message)`; no-op cleanly when there is nothing to commit.
+- `merge_into_base(ticket)` takes a **lock** (directory mutex), merges `--no-ff`, and
+  on conflict aborts the merge, keeps the branch and reports a typed conflict result.
+  It must never leave the base repo mid-merge.
+- `sync_base_into(ticket)` before merging; conflict handled the same way.
+- `remove(ticket)` removes the worktree; tolerates an already-removed worktree.
+- Stale lock detection: a lock whose owning pid is gone is reclaimed, with a log line.
+
+**Acceptance.** Integration tests against real temporary repos: happy path; merge
+conflict leaves base clean and branch intact; two concurrent merges serialise through
+the lock (assert with threads); crash mid-merge (simulate by aborting) recovers;
+stale lock reclaimed; worktree removal is idempotent; a ticket branch that already
+exists is reused, not duplicated.
+
+Status: DONE — Git worktree lifecycle with branch reuse, locked recoverable merges and typed conflicts; 47 real-git integration tests, green gate.
