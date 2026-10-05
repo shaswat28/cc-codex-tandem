@@ -214,6 +214,18 @@ Effort: medium
 `skills/verify-codex/SKILL.md`.
 
 - Thin: describe intent and delegate to `tandem`. No logic restated in prose.
+- **The ticket is the handoff object, not the prompt.** The lane prompt `/tandem`
+  sends Codex must stay compact: point at the ticket and the repository's own
+  instructions, and let Codex read the code itself. Do not restate the ticket, and
+  do not describe a solution — planning tokens spent producing a pseudo-patch are
+  then spent again by Codex rediscovering it.
+- **`/ticket` writes a contract, not an implementation.** Specify observable
+  behaviour, edge cases, constraints and acceptance criteria. Name an interface only
+  when another ticket depends on it: lanes run in separate worktrees and cannot
+  negotiate, so a shared API has to be fixed centrally or the merges will not fit.
+  Never prescribe how to implement something Codex can work out from the repository.
+- Each skill states, in one line, what it does **not** do, so the boundary between
+  Claude's judgement and Codex's implementation is explicit to a reader.
 - `/ticket` documents the split/diagnose/re-scope behaviour, the verbatim
   **Reported** block, the approval step for non-trivial tickets, `--raw`
   (`Status: UNREFINED`, never handed to Codex), and the `BLOCKED` escape hatch.
@@ -237,7 +249,7 @@ Effort: low
 
 **Acceptance.** Workflow is green on `main`.
 
-Status: TODO
+Status: DONE — Workflow runs the full gate on a macOS runner with uv caching, excludes live tests, and has been green on main across consecutive runs.
 
 ---
 
