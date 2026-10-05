@@ -39,7 +39,7 @@ select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PTH", "RUF", "SIM", "TID"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "scripts"]
 warn_unreachable = true
 
 [tool.pytest.ini_options]
@@ -58,3 +58,9 @@ branch = true
 fail_under = 90
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.tandem.coverage]
+minimum = 85
+
+[tool.tandem.coverage.overrides]
+"src/cc_tandem/lanes.py" = 90

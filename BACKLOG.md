@@ -284,7 +284,7 @@ behind well covered ones, which is how an undertested state machine reaches `mai
 per-module check fails (proven by a test with a deliberately low threshold) and
 passes on the real tree; `make check` and CI both run it.
 
-Status: TODO
+Status: DONE — Runner statement and branch coverage at 100%; per-module floors enforced in make check and CI, with 450 tests passing.
 
 ---
 
