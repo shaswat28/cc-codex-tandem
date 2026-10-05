@@ -1,3 +1,4 @@
 * text=auto eol=lf
 BACKLOG.md merge=union
 docs/AGENT-LOG.md merge=union
+docs/BACKLOG-ARCHIVE.md merge=union
