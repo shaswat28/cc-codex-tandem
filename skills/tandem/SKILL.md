@@ -41,6 +41,11 @@ owner-decision block.
 A ticket's worktree has exactly one owner at a time. Before starting work on a
 ticket, confirm no job already owns it; if one does, leave it alone.
 
+- **Check the operating system, not the bookkeeping.** A running job appears as a
+  `task-worker` process carrying its own job id and working directory:
+  `pgrep -fl "task-worker.*--job-id <id>"`. That is ground truth. Confirmed on
+  2026-10-05, when both the aggregate list and a per-id query reported nothing for
+  two jobs that were demonstrably still running.
 - **A job is live until the worktree says otherwise.** Do not infer that a job has
   died from the companion's aggregate job list. It has been observed returning an
   empty running list for a live job, omitting a live job entirely, and answering

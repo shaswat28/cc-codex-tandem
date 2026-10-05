@@ -304,9 +304,11 @@ Neither was a failure of the ticket or the model; both were avoidable collisions
   owned must fail immediately with the owning job id, not proceed.
 - `remove()` must refuse to delete a worktree whose ownership lock is live, and say
   which job holds it. Forced removal requires an explicit override.
-- Liveness comes from the lock and the worktree, never from the companion's job
-  list, which has been observed omitting live jobs and reporting "No job found" for
-  a job still running.
+- Liveness comes from the lock, the worktree, and the presence of the job's
+  `task-worker` process (`pgrep -f "task-worker.*--job-id <id>"`) — never from the
+  companion's job list, which has been observed omitting live jobs and reporting
+  "No job found" for jobs still running. Prefer the process check: it is the only
+  source that was correct every time it was tested.
 
 **Acceptance.** A test starting a second job for an owned ticket fails with the
 owner's id; a test removing an owned worktree is refused and the worktree survives;
