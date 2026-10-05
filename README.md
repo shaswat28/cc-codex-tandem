@@ -91,6 +91,20 @@ commits, merges into the base branch under a lock and appends an entry to
 `docs/AGENT-LOG.md`. A ticket that comes back `BLOCKED`, or a merge that conflicts,
 stops that lane and keeps the branch for you to look at — it never force-merges.
 
+The same commands are available directly as `tandem run`, `tandem status`,
+`tandem stop` and `tandem doctor`. `run` detaches by default and prints its log path
+under `.tandem/logs/`; use `--foreground` to wait for completion. An active run
+prevents a second launch. `status --json` reads checkpoints without contacting the
+companion. `stop` requests a cooperative stop and cancels known jobs through the
+companion. Stopped tickets retain their worktrees for inspection.
+
+All commands accept `--repo PATH`; `run` and `doctor` also accept `--config PATH`
+(relative to the repo, default `.tandem.toml`). Exit codes are `0` for success
+(including no state or no running jobs), `1` for an operational failure or a failed
+doctor check, and `2` for invalid command syntax. A detached launch returns `0`
+when the worker starts; its eventual result is recorded in checkpoints and logs.
+A foreground run returns `1` if any ticket fails or stops before completion.
+
 ### `/verify-codex` — check the work before you trust it
 
 Re-runs the checks rather than reading Codex's summary of them.

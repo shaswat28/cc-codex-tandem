@@ -173,7 +173,7 @@ Effort: medium
 each individual check in isolation; detachment verified by asserting the child
 survives the parent (integration test).
 
-Status: TODO
+Status: DONE — Detached CLI with concurrent-run protection, offline status, cooperative cancellation and doctor checks; documented exit codes, 41 CLI tests, make check green (422 tests, 94.79% coverage).
 
 ---
 
