@@ -55,12 +55,21 @@ make install-hooks  # enable .githooks/commit-msg
 - **`xhigh` effort is rejected** — far more quota for little gain.
 - **Detach by default.** Long runs must survive the 30-minute foreground tool limit.
 - **No polling loops inside a session.** The runner writes state; the session reads it.
+- **Tickets specify behaviour, interfaces and acceptance; not implementation.** Codex
+  can read the repository, so prescribing a solution wastes planning tokens and has it
+  rediscover the same thing. The exception is a **shared interface**: lanes run in
+  separate worktrees and cannot negotiate, so any API two tickets both depend on is
+  named centrally in the ticket, or their merges will not fit together.
+- **The aggregate job list under-reports.** `status --all --json` has been observed
+  returning an empty `running` list while a job was live. Reconcile against per-job
+  status and the worktree, never the aggregate alone.
 
 ## Current state
 
-- T-01 (companion discovery and invocation) and T-02 (effort ladder) are merged to
-  `main`; 89 tests, 100% coverage, gate green.
-- Next: T-03 and T-04, then T-07 (fake companion) before T-05/T-06.
-- Two defects were found by review after a green gate, which is why review is a
-  required step and not an optional one.
+- T-01 through T-04 merged to `main`: companion, effort ladder, backlog parsing,
+  configuration. 170 tests, 100% coverage, gate green.
+- Next: T-07 (fake companion), then T-05/T-06, then T-08..T-12.
+- T-12 supersedes T-02's binary retry policy with a failure taxonomy.
+- Review after a green gate found defects in three of the first four tickets, so
+  review is a required step, not an optional one.
 - Blocked: nothing.
