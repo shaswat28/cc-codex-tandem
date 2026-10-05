@@ -58,7 +58,9 @@ make install-hooks  # enable .githooks/commit-msg
 
 ## Current state
 
-- Scaffold only: manifests, README, license, tooling config, CI, and the stopgap
-  commit-msg guard. No implementation yet.
-- Next: tickets T-01..T-09 in `BACKLOG.md`, run through Codex lanes.
+- T-01 (companion discovery and invocation) and T-02 (effort ladder) are merged to
+  `main`; 89 tests, 100% coverage, gate green.
+- Next: T-03 and T-04, then T-07 (fake companion) before T-05/T-06.
+- Two defects were found by review after a green gate, which is why review is a
+  required step and not an optional one.
 - Blocked: nothing.
