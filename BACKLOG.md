@@ -97,7 +97,7 @@ Effort: low
 **Acceptance.** Unit tests for defaults, each validation failure with its message,
 unknown keys, malformed TOML, and an empty queue.
 
-Status: TODO
+Status: DONE — Typed TOML config with documented defaults, actionable validation and rejection of misspelled keys at every level; 122 tests, 100% coverage.
 
 ---
 
