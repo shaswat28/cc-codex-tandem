@@ -1,0 +1,26 @@
+# This repository's own queue. The remaining tickets came out of running the
+# tool against itself; see docs/AGENT-LOG.md for the incident that produced them.
+
+[codex]
+model          = "gpt-6.1-sol"
+effort_default = "medium"
+
+[lanes]
+count     = 2
+isolation = "worktree"
+base      = "main"
+
+[prompt]
+read_first = ["AGENTS.md", "CLAUDE.md"]
+
+[[queue]]
+ticket = "T-14"
+effort = "medium"
+
+[[queue]]
+ticket = "T-15"
+effort = "medium"
+
+[[queue]]
+ticket = "T-16"
+effort = "low"

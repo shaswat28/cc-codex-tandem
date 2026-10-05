@@ -69,11 +69,12 @@ make install-hooks  # enable .githooks/commit-msg
 
 ## Current state
 
-- Merged to `main`: T-01 companion, T-02 effort, T-03 backlog, T-04 config,
-  T-05 worktree, T-07 fake companion, T-09 verify, T-12 failure taxonomy.
-  332 tests, gate green.
-- Remaining: T-06 lane runner (high), T-08 CLI, T-10 skills, T-11 CI.
-- T-10 is the highest-risk ticket: its prompts decide whether planning and
-  implementation duplicate each other. Review it closely.
-- Review after a green gate has found defects in six of eight tickets so far.
+- Feature complete: all of T-01..T-13 are merged. 491 tests, 99% coverage, a
+  per-module coverage floor, and CI green. `tandem doctor` passes against this
+  repository, which now carries its own `.tandem.toml`.
+- Open: T-14 exclusive worktree ownership, T-15 `awaiting_input` outcome,
+  T-16 handing an oversized ticket back for splitting. All three came from
+  running the tool against itself; see `docs/AGENT-LOG.md` for the incident.
+- Paused 2026-10-05. Next repositories are `cc-session-guard` (TypeScript, not
+  Python) and `cc-afk`.
 - Blocked: nothing.
