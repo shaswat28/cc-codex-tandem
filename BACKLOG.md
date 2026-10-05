@@ -259,3 +259,51 @@ Effort: medium
 [Implementation details and acceptance criteria](docs/BACKLOG-ARCHIVE.md#t-12-classify-failures-before-escalating-effort).
 
 Status: DONE — Observable failure taxonomy, quota-safe attempt accounting, repeat-aware escalation and documented policy; 294 tests, green make check.
+
+---
+
+## T-13: Cover the lane runner and enforce coverage per module
+Effort: medium
+
+**Scope.** `tests/integration/test_lanes.py`, `tests/unit/`, `pyproject.toml`.
+
+`lanes.py` sits at 61% statement coverage with 62 partial branches while the suite
+reports 94% overall. A single global floor lets one weakly covered module hide
+behind well covered ones, which is how an undertested state machine reaches `main`.
+
+- Raise `lanes.py` to at least 90% statement **and** branch coverage. Target the
+  uncovered paths rather than adding happy-path repeats: detachment, logging,
+  reconciliation when the job list disagrees with the worktree, cleanup after a
+  failed merge, invariant violations, and every early return.
+- Add a **per-module** coverage floor so no single file can fall below 85% even when
+  the total passes. Implement it as a check that reads coverage data and fails with
+  the offending file names; wire it into `make check` and CI.
+- Keep the existing global floor at 90%.
+
+**Acceptance.** `lanes.py` at or above 90% statement and branch coverage; the
+per-module check fails (proven by a test with a deliberately low threshold) and
+passes on the real tree; `make check` and CI both run it.
+
+Status: TODO
+
+---
+
+## T-14: Tickets that stall twice must be split, not retried
+Effort: low
+
+**Scope.** `README.md`, `skills/tandem/SKILL.md`, `src/cc_tandem/lanes.py`.
+
+T-06 stalled twice at `high`, the capped level, each time leaving partial work. The
+taxonomy escalates effort, but effort was already maxed: the real signal is that the
+ticket was too large for one job. Retrying it a third time would have wasted quota.
+
+- When a ticket reaches the effort cap and stalls again, stop the lane and report it
+  as **too large**, naming the partial artefacts already in the worktree, rather than
+  retrying. Do not silently consume the remaining attempts.
+- Document the rule in `README.md` beside the effort table, and in `/tandem` as the
+  signal to send the ticket back to `/ticket` for splitting.
+
+**Acceptance.** A test driving two consecutive stalls at `high` asserts the lane
+stops with a distinguishable "too large" outcome and that the branch is kept.
+
+Status: TODO

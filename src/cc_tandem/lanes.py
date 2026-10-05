@@ -189,7 +189,9 @@ class Runner:
         # A symlink must not turn a repo-relative worker edit into an outside write.
         # Ignore build environments: their interpreter links legitimately point
         # outside the checkout. Check every tracked/unignored worker artifact.
-        names = _git_output(expected, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+        names = _git_output(
+            expected, "ls-files", "-z", "--cached", "--others", "--exclude-standard"
+        )
         for name in names.split("\0"):
             if not name:
                 continue
@@ -263,7 +265,9 @@ class Runner:
         if base_ticket.status == Status.UNREFINED:
             raise LaneError("UNREFINED tickets must be refined before running")
         if record.phase in _COMPLETE:
-            raise LaneError("Completed checkpoint disagrees with base backlog; reset before rerunning")
+            raise LaneError(
+                "Completed checkpoint disagrees with base backlog; reset before rerunning"
+            )
         if record.phase in _STOPPED:
             return record
         if record.phase in _FINISHING:
