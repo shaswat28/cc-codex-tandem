@@ -13,3 +13,13 @@ Dated execution history. Appended by the lane runner; not read by default.
 - Process finding: a status line written by searching forward for the next `TODO`
   landed on the wrong ticket when a concurrent writer had already updated the
   intended one. Folded into T-03's acceptance criteria.
+
+## 2026-10-05 — T-03
+
+- Added typed ticket parsing/rendering and ID-scoped status writes that check the
+  expected state under an advisory writer lock. LF, CRLF and absent final newlines
+  are preserved; malformed content raises typed errors.
+- Review caught a body horizontal rule being mistaken for a separator; fixed and
+  covered by regression tests. Concurrent writers are tested for stale-state rejection.
+- Validation: `make check` passed on Python 3.13.9: lint, formatting, strict types,
+  137 tests, 100% coverage. No git commands or real companion calls were run.
