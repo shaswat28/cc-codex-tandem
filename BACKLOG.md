@@ -159,20 +159,9 @@ Status: TODO
 ## T-07: Fake Codex companion
 Effort: medium
 
-**Scope.** `tests/fakes/fake_companion.mjs` plus a pytest fixture that points
-`CC_TANDEM_COMPANION` at it.
+[Implementation details and acceptance criteria](docs/BACKLOG-ARCHIVE.md#t-07-fake-codex-companion).
 
-- Accepts the same arguments the real companion is invoked with and emits the same
-  JSON shapes for `status --all --json`.
-- Scriptable per test through an env var or a scenario file: succeed, fail, emit a
-  usage-limit message, hang until killed, exit non-zero, produce invalid JSON, and
-  "succeed but change nothing".
-- Can simulate editing files in its working directory so merges have real content.
-
-**Acceptance.** Each scenario has a test asserting the companion layer classifies it
-correctly. The fake never reaches the network.
-
-Status: TODO
+Status: DONE — Offline scriptable companion and isolated fixtures cover all seven scenarios, file edits, retries and job status; 189 tests, 100% Python coverage.
 
 ---
 

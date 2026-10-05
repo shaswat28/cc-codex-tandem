@@ -27,3 +27,22 @@ handled as specified; fixtures include a malformed file.
 
 Status: DONE — Typed fence-aware parsing and rendering; byte-preserving status updates with expected-state checks and writer locking; 137 tests, 100% coverage.
 
+## T-07: Fake Codex companion
+Effort: medium
+
+**Scope.** `tests/fakes/fake_companion.mjs` plus a pytest fixture that points
+`CC_TANDEM_COMPANION` at it.
+
+- Accepts the same arguments the real companion is invoked with and emits the same
+  JSON shapes for `status --all --json`.
+- Scriptable per test through an env var or a scenario file: succeed, fail, emit a
+  usage-limit message, hang until killed, exit non-zero, produce invalid JSON, and
+  "succeed but change nothing".
+- Can simulate editing files in its working directory so merges have real content.
+
+**Acceptance.** Each scenario has a test asserting the companion layer classifies it
+correctly. The fake never reaches the network.
+
+Fixture configuration and supported commands: [fake companion guide](../tests/fakes/README.md).
+
+Status: DONE — Offline scriptable companion and isolated fixtures cover all seven scenarios, file edits, retries and job status; 189 tests, 100% Python coverage.

@@ -23,3 +23,17 @@ Dated execution history. Appended by the lane runner; not read by default.
   covered by regression tests. Concurrent writers are tested for stale-state rejection.
 - Validation: `make check` passed on Python 3.13.9: lint, formatting, strict types,
   137 tests, 100% coverage. No git commands or real companion calls were run.
+
+## 2026-10-05 — T-07
+
+- Added an offline Node companion double, default pytest override and isolated
+  workspace fixture. Seven scenarios, retry sequences, bounded foreground hangs,
+  background status/result/cancel and optional file edits are documented in
+  `tests/fakes/README.md`.
+- Added 19 real Python/Node boundary tests. Review caught completed job state after
+  a rejected edit; corrected it and asserted failed status. Traversal, absolute
+  paths and directory/file symlink escapes are rejected before applying edits.
+- Validation: `UV_CACHE_DIR=/tmp/cc-tandem-t07-uv-cache make check` passed on
+  Python 3.13.9: lint, formatting, strict types, 189 tests, 100% Python coverage.
+  The cache override avoids sandbox restrictions on the default UV cache. No git
+  commands or real companion calls were run.
