@@ -203,7 +203,7 @@ into the backlog rather than only fixing the code.
 for per-commit verification against a temporary repo with one deliberately broken
 commit in the middle.
 
-Status: TODO
+Status: DONE — Implemented gate reruns, configurable mention scanning, isolated per-commit verification and intent review; make check passes (265 tests).
 
 ---
 

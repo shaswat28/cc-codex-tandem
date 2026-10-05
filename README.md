@@ -97,10 +97,20 @@ Re-runs the checks rather than reading Codex's summary of them.
 
 1. Re-run every check the job claimed passed, and diff actual against claimed
 2. Open the recorded evidence files and confirm they match those claims
-3. Review the diff for defects
-4. Scan the diff **and branch names** for assistant mentions that should not ship
-5. Verify each commit independently in a throwaway worktree
-6. Only then offer to push
+3. Review intent: **is this the right behaviour?** Check unspecified edge cases too
+4. Review conformance separately: does it match what the ticket asked for?
+5. Record ticket defects under the affected ticket in `BACKLOG.md`, even when fixing the code
+6. Review the diff for defects and scan added lines, commit messages and branch names for attribution
+7. Verify each commit independently in a throwaway worktree
+8. Only then offer to push
+
+The scripted checks live in `cc_tandem.verify`: `rerun_checks(commands)` retains each
+command's exit code, stdout, stderr and timeout result; `scan_assistant_mentions`
+accepts unified diff text or `Path` objects plus commit messages and branch names,
+with configurable regex exceptions; `verify_each_commit(range, commands, repo=...)`
+runs the gate oldest-first in fresh detached worktrees and stops at the first failure.
+The scripted results supplement the intent and evidence review; they cannot decide
+whether a ticket describes the right behaviour.
 
 ## Configuration
 
