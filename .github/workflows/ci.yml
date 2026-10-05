@@ -41,4 +41,4 @@ jobs:
         run: uv run mypy
 
       - name: Tests
-        run: uv run pytest -m "not live" --cov --cov-report=term-missing
+        run: make cov

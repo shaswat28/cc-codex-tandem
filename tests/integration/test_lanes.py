@@ -4,7 +4,9 @@ import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from tests.conftest import FakeCompanion
@@ -17,7 +19,7 @@ from cc_tandem.companion import CompanionResult, JsonValue
 from cc_tandem.config import CodexConfig, Config, LanesConfig, PromptConfig, QueueEntry
 from cc_tandem.effort import Effort
 from cc_tandem.lanes import LaneError, Runner, build_prompt, inside
-from cc_tandem.state import Phase, StateStore, TicketState
+from cc_tandem.state import Phase, StateStore, TicketState, timestamp
 from cc_tandem.worktree import WorktreeManager
 
 pytestmark = pytest.mark.integration
@@ -319,3 +321,296 @@ def test_containment(tmp_path: Path, name: str) -> None:
 def test_empty_read_first_prompt() -> None:
     ticket = Ticket("T-01", "Example", Effort.LOW, "", Status.TODO)
     assert "(none)" in build_prompt(ticket, (), "rules")
+
+
+def checkpoint(run: Runner, phase: Phase, *, create: bool = True) -> TicketState:
+    path = run.manager.create("T-01") if create else None
+    now = timestamp()
+    return run.store.put(
+        TicketState(
+            "T-01",
+            0,
+            Effort.LOW,
+            now,
+            now,
+            phase=phase,
+            worktree=str(path) if path else None,
+        )
+    )
+
+
+def test_background_submission_and_diagnostic_log(repository: WorktreeManager, jobs: Jobs) -> None:
+    saved = runner(repository).run()["T-01"]
+    task = next(args for args in jobs.calls if args[0] == "task")
+    assert {"--background", "--write", "--fresh"}.issubset(task)
+    log = json.loads(Path(saved.logs[0]).read_text())
+    assert log["outcome"] == "ok" and log["job_id"] == saved.job_id
+    assert log["effort"] == "low" and log["checks"][0]["returncode"] == 0
+
+
+def test_queue_invariants(repository: WorktreeManager, jobs: Jobs) -> None:
+    run = runner(repository)
+    entry = QueueEntry("T-01", Effort.LOW)
+    with pytest.raises(LaneError, match="more than one lane"):
+        run.run([[entry], [entry]])
+    checkpoint(run, Phase.PENDING, create=False)
+    with pytest.raises(LaneError, match="different lane"):
+        run.run([[], [entry]])
+    assert jobs.counts == {}
+
+
+def test_empty_queue(repository: WorktreeManager, jobs: Jobs) -> None:
+    assert runner(repository, tickets=()).run([]) == {}
+    assert jobs.counts == {}
+
+
+@pytest.mark.parametrize("status", [Status.BLOCKED, Status.UNREFINED])
+def test_unrunnable_base_ticket(repository: WorktreeManager, jobs: Jobs, status: Status) -> None:
+    backlog.set_status(
+        repository.repo / "BACKLOG.md", "T-01", status, "Needs input", expected_status=Status.TODO
+    )
+    saved = runner(repository).run()["T-01"]
+    assert saved.phase == (Phase.BLOCKED if status == Status.BLOCKED else Phase.FAILED)
+    if status == Status.UNREFINED:
+        assert "UNREFINED" in (saved.error or "")
+    assert saved.finished_at and not repository.path_for("T-01").exists()
+    assert jobs.counts == {}
+
+
+@pytest.mark.parametrize("phase", [Phase.DONE, Phase.SKIPPED])
+def test_completed_checkpoint_disagrees_with_backlog(
+    repository: WorktreeManager, jobs: Jobs, phase: Phase
+) -> None:
+    run = runner(repository)
+    checkpoint(run, phase, create=False)
+    saved = run.run()["T-01"]
+    assert saved.phase == Phase.FAILED and "disagrees" in (saved.error or "")
+    assert jobs.counts == {}
+
+
+def test_stale_worktree_removed_for_done_base(repository: WorktreeManager, jobs: Jobs) -> None:
+    run = runner(repository)
+    checkpoint(run, Phase.PREPARING)
+    backlog.set_status(
+        repository.repo / "BACKLOG.md",
+        "T-01",
+        Status.DONE,
+        "Completed",
+        expected_status=Status.TODO,
+    )
+    saved = run.run()["T-01"]
+    assert saved.phase == Phase.SKIPPED and not repository.path_for("T-01").exists()
+    assert jobs.counts == {}
+
+
+@pytest.mark.parametrize("phase", [Phase.SUBMITTING, Phase.WAITING])
+def test_incomplete_checkpoint_is_not_relaunched(
+    repository: WorktreeManager, jobs: Jobs, phase: Phase
+) -> None:
+    run = runner(repository)
+    checkpoint(run, phase)
+    saved = run.run()["T-01"]
+    assert saved.phase == Phase.FAILED
+    assert ("without job ID" if phase == Phase.SUBMITTING else "no retry deadline") in (
+        saved.error or ""
+    )
+    assert jobs.counts == {}
+
+
+def test_blocked_worktree_on_resume(repository: WorktreeManager, jobs: Jobs) -> None:
+    run = runner(repository)
+    saved = checkpoint(run, Phase.PREPARING)
+    assert saved.worktree
+    backlog.set_status(
+        Path(saved.worktree) / "BACKLOG.md",
+        "T-01",
+        Status.BLOCKED,
+        "Options",
+        expected_status=Status.TODO,
+    )
+    assert run.run()["T-01"].phase == Phase.BLOCKED
+    assert jobs.counts == {}
+
+
+def test_expired_wait_retries_without_sleep(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = runner(repository)
+    saved = checkpoint(run, Phase.WAITING)
+    run.store.put(replace(saved, retry_at=(datetime.now(UTC) - timedelta(days=1)).isoformat()))
+    sleep = Mock()
+    monkeypatch.setattr(run, "sleep", sleep)
+    assert run.run()["T-01"].phase == Phase.DONE
+    sleep.assert_not_called()
+
+
+@pytest.mark.parametrize("outcome", ["pass", "fail", "retry"])
+def test_recover_done_worktree_before_submission(
+    repository: WorktreeManager, jobs: Jobs, outcome: str
+) -> None:
+    run = runner(repository, max_attempts=1 if outcome == "fail" else 3)
+    saved = checkpoint(run, Phase.PREPARING)
+    assert saved.worktree
+    path = Path(saved.worktree)
+    backlog.set_status(
+        path / "BACKLOG.md", "T-01", Status.DONE, "Recovered", expected_status=Status.TODO
+    )
+    if outcome != "pass":
+        (path / "gate.txt").write_text("bad")
+    if outcome == "retry":
+        jobs.specs["T-01"] = [{"files": {"gate.txt": "ok"}}]
+    result = run.run()["T-01"]
+    assert result.phase == (Phase.EXHAUSTED if outcome == "fail" else Phase.DONE)
+    assert jobs.counts == ({"T-01": 1} if outcome == "retry" else {})
+
+
+@pytest.mark.parametrize("kind", ["dry", "no_id", "blocked", "done"])
+def test_submission_without_job_id(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    run = runner(repository, max_attempts=1)
+
+    def launch(args: Sequence[str]) -> CompanionResult:
+        assert args[0] == "task"
+        path = Path(args[args.index("--cwd") + 1])
+        if kind in {"blocked", "done"}:
+            backlog.set_status(
+                path / "BACKLOG.md",
+                "T-01",
+                Status.BLOCKED if kind == "blocked" else Status.DONE,
+                "Result",
+                expected_status=Status.TODO,
+            )
+        return CompanionResult(0, "", "", dry_run=kind == "dry", json={})
+
+    monkeypatch.setattr(run, "_call", launch)
+    saved = run.run()["T-01"]
+    expected = {
+        "dry": Phase.FAILED,
+        "no_id": Phase.EXHAUSTED,
+        "blocked": Phase.BLOCKED,
+        "done": Phase.DONE,
+    }
+    assert saved.phase == expected[kind]
+    if kind == "dry":
+        assert "Dry run" in (saved.error or "")
+    assert jobs.counts == {}
+
+
+def test_sync_gate_failure_retains_clean_branch(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = runner(repository)
+    sync = repository.sync_base_into
+
+    def advance(ticket: str) -> object:
+        from cc_tandem.worktree import commit_all
+
+        (repository.repo / "gate.txt").write_text("bad")
+        commit_all(repository.repo, "Advance gate")
+        return sync(ticket)
+
+    monkeypatch.setattr(repository, "sync_base_into", advance)
+    saved = run.run()["T-01"]
+    assert saved.phase == Phase.FAILED and "after syncing base" in (saved.error or "")
+    assert repository.path_for("T-01").is_dir()
+    assert git(repository.path_for("T-01"), "status", "--porcelain") == ""
+
+
+def test_failed_base_merge_aborts_and_retains_lane(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    merge = repository.merge_into_base
+    jobs.specs["T-01"] = [{"files": {"shared.txt": "lane edit\n"}}]
+
+    def advance(ticket: str) -> object:
+        from cc_tandem.worktree import commit_all
+
+        (repository.repo / "shared.txt").write_text("base edit\n")
+        commit_all(repository.repo, "Advance before merge")
+        return merge(ticket)
+
+    monkeypatch.setattr(repository, "merge_into_base", advance)
+    saved = runner(repository).run()["T-01"]
+    assert saved.phase == Phase.CONFLICT and "shared.txt" in (saved.error or "")
+    assert repository.path_for("T-01").is_dir()
+    assert git(repository.repo, "status", "--porcelain") == ""
+    assert not (repository.repo / ".git/MERGE_HEAD").exists()
+    assert "<!-- tandem:T-01:" not in (
+        (repository.repo / "docs/AGENT-LOG.md").read_text()
+        if (repository.repo / "docs/AGENT-LOG.md").exists()
+        else ""
+    )
+
+
+def test_logging_recovery_does_not_duplicate_audit(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = runner(repository)
+    commit = repository.commit_all
+
+    def crash_after_audit(path: Path, message: str) -> bool:
+        if message.startswith("Record"):
+            raise Crash()
+        return commit(path, message)
+
+    monkeypatch.setattr(repository, "commit_all", crash_after_audit)
+    with pytest.raises(Crash):
+        run.run()
+    monkeypatch.setattr(repository, "commit_all", commit)
+    assert run.run()["T-01"].phase == Phase.DONE
+    assert (repository.repo / "docs/AGENT-LOG.md").read_text().count("<!-- tandem:T-01:") == 1
+    assert jobs.counts == {"T-01": 1}
+
+
+def test_done_base_reconciles_running_job_before_cleanup(
+    repository: WorktreeManager, jobs: Jobs
+) -> None:
+    jobs.specs["T-01"] = ["no_change"]
+    run = runner(repository)
+    saved = checkpoint(run, Phase.RUNNING)
+    assert saved.worktree
+    launched = run._call(["task", "--background", "--cwd", saved.worktree, "implement"])
+    assert isinstance(launched.json, dict)
+    job_id = launched.json["jobId"]
+    assert isinstance(job_id, str)
+    run.store.put(replace(saved, job_id=job_id))
+    backlog.set_status(
+        repository.repo / "BACKLOG.md",
+        "T-01",
+        Status.DONE,
+        "Completed elsewhere",
+        expected_status=Status.TODO,
+    )
+    result = run.run()["T-01"]
+    assert result.phase == Phase.SKIPPED and not repository.path_for("T-01").exists()
+    assert ("status", job_id, "--json") in jobs.calls
+    assert ("result", job_id, "--json") in jobs.calls
+    assert jobs.counts == {"T-01": 1}
+
+
+def test_launch_capacity_error_waits_and_retries_same_effort(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = runner(repository)
+    call = run._call
+    failed = False
+    efforts: list[Effort] = []
+
+    def limited(args: Sequence[str]) -> CompanionResult:
+        nonlocal failed
+        if args[0] == "task":
+            efforts.append(Effort.parse(args[args.index("--effort") + 1]))
+            if not failed:
+                failed = True
+                return CompanionResult(1, "Usage limit reached", "")
+        return call(args)
+
+    sleep = Mock()
+    monkeypatch.setattr(run, "_call", limited)
+    monkeypatch.setattr(run, "sleep", sleep)
+    saved = run.run()["T-01"]
+    assert saved.phase == Phase.DONE and saved.attempts == 1 and saved.backoff_count == 1
+    assert efforts == [Effort.LOW, Effort.LOW]
+    sleep.assert_called_once()
+    assert 0 < sleep.call_args.args[0] <= 1
