@@ -217,6 +217,14 @@ Effort: medium
 - `verify_each_commit(range)` checks out each commit in a throwaway worktree and runs
   the gate, reporting the first commit that fails.
 
+**Review the behaviour against intent, not the output against the ticket.** The
+ticket can itself be wrong, and a faithful implementation of a wrong ticket passes
+every conformance check. Observed case: a ticket said "unknown top-level keys are an
+error", the implementation did exactly that, and misspelled nested keys stayed
+silently ignored. The checklist must prompt for "is this the right behaviour?"
+separately from "does this match what was asked?", and record ticket defects back
+into the backlog rather than only fixing the code.
+
 **Acceptance.** Unit tests for the mention scanner's true and **false** positives
 (this repo's own README and manifests must produce zero findings). Integration tests
 for per-commit verification against a temporary repo with one deliberately broken
