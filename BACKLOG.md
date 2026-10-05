@@ -136,7 +136,7 @@ once per attempt; attempts exhausted; `BLOCKED` stops one lane and not the other
 merge conflict stops the lane; resume after a simulated crash; state file is always
 valid JSON when read concurrently; a ticket already `DONE` is skipped.
 
-Status: DONE — Lane state machine, atomic checkpointed state and resume; all nine acceptance scenarios covered by real-git integration tests. Branch coverage of lanes.py is 61%, tracked by T-13.
+Status: DONE — Lane state machine, atomic checkpointed state and resume; all nine acceptance scenarios covered by real-git integration tests. Coverage of lanes.py is 61% because the job was interrupted by a worktree collision, not because the work was too large; tracked by T-13.
 
 ---
 
@@ -288,22 +288,79 @@ Status: TODO
 
 ---
 
-## T-14: Tickets that stall twice must be split, not retried
+## T-14: A lane must own its worktree exclusively
+Effort: medium
+
+**Scope.** `src/cc_tandem/lanes.py`, `src/cc_tandem/worktree.py`.
+
+Observed on 2026-10-05: two jobs ran against the T-06 worktree at once because the
+operator read `status --all` as "no job found" and relaunched. The second job saw
+`lanes.py` changing underneath it and stopped to ask whether another agent was
+editing. The first was then killed when the worktree was removed while it was live.
+Neither was a failure of the ticket or the model; both were avoidable collisions.
+
+- Take an **ownership lock** per ticket worktree, recording job id, pid and start
+  time, held for the whole job. Starting a second job for a ticket that is already
+  owned must fail immediately with the owning job id, not proceed.
+- `remove()` must refuse to delete a worktree whose ownership lock is live, and say
+  which job holds it. Forced removal requires an explicit override.
+- Liveness comes from the lock and the worktree, never from the companion's job
+  list, which has been observed omitting live jobs and reporting "No job found" for
+  a job still running.
+
+**Acceptance.** A test starting a second job for an owned ticket fails with the
+owner's id; a test removing an owned worktree is refused and the worktree survives;
+a stale lock whose pid is gone is reclaimed; the override path is tested.
+
+Status: TODO
+
+---
+
+## T-15: Treat "job ended asking a question" as its own outcome
+Effort: medium
+
+**Scope.** `src/cc_tandem/companion.py`, `src/cc_tandem/effort.py`, lane prompt.
+
+Both T-06 jobs ended by posing a question with options and waiting. Detached, nobody
+answers, so the job simply ends. Classified by the current taxonomy this looks like
+`stalled` and escalates effort, which is wrong twice over: nothing was stalled, and
+escalating reasoning cannot answer an environmental question.
+
+- Add an `awaiting_input` class: the job produced a final message asking the operator
+  a question rather than reaching a terminal ticket status. Detect it from the job's
+  recorded final output, not from prose anywhere in the log.
+- Policy: stop the lane, keep the branch, and surface the question verbatim. Never
+  escalate effort and never consume further attempts.
+- Extend the lane prompt: the `BLOCKED (needs owner decision)` protocol covers
+  **product** decisions; for an environmental or operational surprise the job must
+  record what it observed in the ticket and stop, rather than ask a question no one
+  will read.
+
+**Acceptance.** A fake-companion scenario ending with an unanswered question is
+classified `awaiting_input`; a test asserts effort is unchanged and the attempt
+budget is not consumed; the question text reaches the lane report.
+
+Status: TODO
+
+---
+
+## T-16: Split a ticket that is genuinely too large
 Effort: low
 
-**Scope.** `README.md`, `skills/tandem/SKILL.md`, `src/cc_tandem/lanes.py`.
+**Scope.** `skills/ticket/SKILL.md`, `skills/tandem/SKILL.md`, `README.md`.
 
-T-06 stalled twice at `high`, the capped level, each time leaving partial work. The
-taxonomy escalates effort, but effort was already maxed: the real signal is that the
-ticket was too large for one job. Retrying it a third time would have wasted quota.
+Distinct from T-14 and T-15, which cover collisions and unanswered questions. A
+ticket that repeatedly produces partial work *after* those causes are excluded is
+too large for one job.
 
-- When a ticket reaches the effort cap and stalls again, stop the lane and report it
-  as **too large**, naming the partial artefacts already in the worktree, rather than
-  retrying. Do not silently consume the remaining attempts.
-- Document the rule in `README.md` beside the effort table, and in `/tandem` as the
-  signal to send the ticket back to `/ticket` for splitting.
+- When a ticket reaches the effort cap and genuinely stalls again, the lane stops and
+  reports it as too large, naming the partial artefacts in the worktree. It must not
+  retry a third time and must not split the ticket itself.
+- Splitting is `/ticket`'s job: it reads the partial work, writes smaller tickets
+  with the same contract style, and records the dependency order between them.
+  Document the handback in both skills and beside the effort table in `README.md`.
 
-**Acceptance.** A test driving two consecutive stalls at `high` asserts the lane
-stops with a distinguishable "too large" outcome and that the branch is kept.
+**Acceptance.** A test driving genuine stalls at the capped effort asserts the lane
+stops with a distinguishable "too large" outcome and keeps the branch.
 
 Status: TODO

@@ -54,3 +54,20 @@ Dated execution history. Appended by the lane runner; not read by default.
   branch reuse, idempotent removal and concurrent merge/lock contention.
 - Git operations ran only inside isolated temporary test repositories. No git
   commands targeted this project checkout; no real companion calls were made.
+
+## 2026-10-05 — T-06 did not stall; the operator caused both stops
+
+Timeline from the companion job logs:
+
+- 23:30:51 job `task-muvvv3t1` starts on T-06.
+- 23:34:32 job `task-muvvzugm` starts on the **same** worktree. The operator had read
+  `status --all` as "No job found" and concluded the first job was dead. It was not.
+- 23:35:42 the second job stops: "lanes.py changed while I was reading it. Is another
+  agent currently editing T-06?"
+- 23:42:49 the first job stops: "The authorized T-06 worktree was removed externally" —
+  it was removed during cleanup for the next wave while that job was still live.
+
+Neither job failed and neither ticket was too large. Lessons, now tickets T-14, T-15
+and T-16: a lane must hold an exclusive ownership lock on its worktree; liveness must
+never be inferred from the companion's aggregate job list; a job that ends by asking
+an unanswered question is its own outcome and must not escalate effort.
