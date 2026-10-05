@@ -1,0 +1,8 @@
+{
+  "name": "cc-codex-tandem",
+  "version": "0.1.0",
+  "description": "Claude plans, Codex builds: write tickets, run them through Codex in isolated parallel lanes, verify the result.",
+  "author": {
+    "name": "shaswat28"
+  }
+}

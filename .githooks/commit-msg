@@ -1,0 +1,14 @@
+#!/bin/sh
+# Stopgap assistant-attribution guard, pending cc-session-guard.
+# Rejects commit messages that credit an AI assistant.
+set -e
+msg_file="$1"
+if grep -qiE '^[[:space:]]*co-authored-by:[[:space:]]*(claude|codex|gpt|copilot)' "$msg_file" \
+   || grep -qiE 'generated with \[?(claude|codex)' "$msg_file" \
+   || grep -qiE '🤖 generated with' "$msg_file"; then
+  echo "commit-msg: assistant attribution is not allowed in this repository." >&2
+  echo "Offending line(s):" >&2
+  grep -inE 'co-authored-by:[[:space:]]*(claude|codex|gpt|copilot)|generated with \[?(claude|codex)|🤖 generated with' "$msg_file" >&2
+  exit 1
+fi
+exit 0

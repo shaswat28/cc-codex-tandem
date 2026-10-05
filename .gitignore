@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# uv
+uv.lock.bak
+
+# Node (fake companion fixtures / codex companion scratch)
+node_modules/
+
+# Agent session artifacts (never committed)
+handoff.md
+QUESTIONS.md
+
+# Runtime state written by the lane runner
+.tandem/
+tandem-state.json
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.idea/
+.vscode/
+*.swp

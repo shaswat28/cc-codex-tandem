@@ -1,0 +1,19 @@
+{
+  "name": "cc-codex-tandem",
+  "owner": {
+    "name": "shaswat28"
+  },
+  "metadata": {
+    "description": "Claude Code plugin for the Claude-plans/Codex-builds workflow.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "cc-codex-tandem",
+      "description": "Write Codex-ready tickets, run them in isolated parallel lanes, verify the result.",
+      "version": "0.1.0",
+      "author": { "name": "shaswat28" },
+      "source": "."
+    }
+  ]
+}
