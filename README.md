@@ -134,9 +134,33 @@ effort = "high"
 `low`, `medium` and `high` map to Codex reasoning effort. Pick by difficulty:
 mechanical edits `low`, ordinary features `medium`, anything architectural `high`.
 
-A job that fails for a real reason is retried one level higher, capped at `high`.
-`xhigh` is rejected: it costs far more quota for little gain. A usage-limit error is
-not a failure — the lane waits and retries at the same level.
+Failures are classified from exit codes, output markers, worktree changes, actual
+project gate results and parsed ticket status. Prose claiming success or asking for
+help does not decide the class.
+
+| Class | Evidence | Retry policy |
+| --- | --- | --- |
+| `capacity` | Non-zero exit with usage/rate-limit markers | Same effort with backoff; consumes **no attempt** |
+| `infrastructure` | Process error or no turn started, with no diff | Same effort with backoff |
+| `implementation` | A diff exists and the project gate fails | Same effort once; escalate on a repeat |
+| `stalled` | Job ends without completion or a block, including no diff; same gate failure twice | Escalate one level, capped at `high` |
+| `owner_decision` | Ticket status is `BLOCKED (needs owner decision)` | Stop; never escalate |
+
+A zero exit alone does not prove completion: the ticket must reach `DONE` without a
+failing gate. A blocked ticket always stops, even if quota markers also appear.
+All results except capacity consume an attempt; retries stop at the attempt limit.
+Capacity is exempt from that budget but not unbounded: a lane gives up after 24
+consecutive quota waits, so a quota that never reopens cannot retry forever.
+Implementation occurrences are tracked separately, so infrastructure errors and
+capacity waits cannot trigger a premature escalation. Gate failure identifiers
+compare actual diagnostics, without interpreting prose. Retry delays grow
+exponentially with consecutive waits and cap at one hour by default.
+
+The pure `next_attempt` policy takes the count **before** the invocation (initially
+zero), returns the updated `attempt` and `implementation_failures` counters, and
+returns the delay without sleeping. It returns `backoff_count` too, so every counter it consumes is one it hands back. Callers supply `backoff_count` so
+capacity waits grow their delay while preserving the attempt budget.
+`xhigh` is rejected: it costs far more quota for little gain.
 
 ## Safety
 

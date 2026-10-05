@@ -68,3 +68,35 @@ stale lock reclaimed; worktree removal is idempotent; a ticket branch that alrea
 exists is reused, not duplicated.
 
 Status: DONE — Git worktree lifecycle with branch reuse, locked recoverable merges and typed conflicts; 47 real-git integration tests, green gate.
+
+## T-12: Classify failures before escalating effort
+Effort: medium
+
+**Scope.** `src/cc_tandem/effort.py` and `src/cc_tandem/companion.py`.
+
+The current policy is binary: a usage limit retries at the same effort, anything
+else escalates one level. That wastes quota, because most failures are not caused
+by insufficient reasoning. A syntax error does not get fixed by thinking harder.
+
+Replace `Outcome` with a failure taxonomy, classified from observable signals only
+(exit code, output markers, whether the worktree diff is empty, whether the ticket
+reached a terminal `Status:`). Do not attempt to infer intent from prose.
+
+| Class | Signal | Policy |
+| --- | --- | --- |
+| `capacity` | usage/rate-limit markers on a non-zero exit | same effort, backoff, **does not consume an attempt** |
+| `infrastructure` | companion/process error, no diff produced, no turn started | same effort, backoff |
+| `implementation` | a diff exists and the project gate fails | same effort, **once**; escalate on a repeat |
+| `stalled` | job ended with no diff and no block, or the same gate failure twice | escalate one level, capped at `high` |
+| `owner_decision` | ticket set to `BLOCKED` | stop; **never** escalate |
+
+`capacity` not consuming an attempt is the important change: a lane should not
+exhaust its attempt budget waiting out a quota window.
+
+**Acceptance.** Table-driven unit tests for every class and transition; a test that
+`capacity` leaves the attempt count unchanged while every other class increments it;
+a test that `owner_decision` never escalates under any attempt count; a test that
+`implementation` escalates only on the second occurrence. Update `README.md`'s
+effort section to document the taxonomy. Keep `xhigh` rejected.
+
+Status: DONE — Observable failure taxonomy, quota-safe attempt accounting, repeat-aware escalation and documented policy; 294 tests, green make check.

@@ -8,12 +8,14 @@ from unittest.mock import Mock
 import pytest
 
 from cc_tandem import companion
+from cc_tandem.backlog import Status
 from cc_tandem.companion import (
     CompanionInvalid,
     CompanionNotFound,
     CompanionResult,
     StatusRecord,
 )
+from cc_tandem.effort import FailureClass
 
 
 @pytest.fixture(autouse=True)
@@ -110,16 +112,19 @@ def test_run(
     ("stdout", "stderr", "code", "outcome"),
     [
         ("done", "", 0, "ok"),
-        ("", "failure", 1, "failed"),
-        ("You've hit your usage limit", "", 1, "usage_limit"),
-        ("", "Rate limit exceeded", 1, "usage_limit"),
-        ("quota exhausted", "", 1, "usage_limit"),
-        ("Too many requests", "", 1, "usage_limit"),
-        ('{"error":"usage_limit"}', "", 1, "usage_limit"),
+        ("", "failure", 1, "stalled"),
+        ("You've hit your usage limit", "", 1, "capacity"),
+        ("", "Rate limit exceeded", 1, "capacity"),
+        ("quota exhausted", "", 1, "capacity"),
+        ("Too many requests", "", 1, "capacity"),
+        ('{"error":"usage_limit"}', "", 1, "capacity"),
     ],
 )
-def test_classify(stdout: str, stderr: str, code: int, outcome: companion.Outcome) -> None:
-    assert companion.classify(CompanionResult(code, stdout, stderr)) == outcome
+def test_classify(stdout: str, stderr: str, code: int, outcome: FailureClass) -> None:
+    assert (
+        companion.classify(CompanionResult(code, stdout, stderr), ticket_status=Status.DONE)
+        == outcome
+    )
 
 
 @pytest.mark.parametrize("override", [None, "/does/not/exist.mjs"])
@@ -190,9 +195,111 @@ def test_successful_exit_is_never_a_usage_limit() -> None:
         stdout="Implemented the rate limit middleware; too many requests now return 429.",
         stderr="",
     )
-    assert companion.classify(result) == "ok"
+    assert companion.classify(result, ticket_status=Status.DONE) == "ok"
 
 
 def test_usage_limit_is_detected_only_on_failure() -> None:
     result = companion.CompanionResult(exit_code=1, stdout="", stderr="You hit your usage limit")
-    assert companion.classify(result) == "usage_limit"
+    assert companion.classify(result) == "capacity"
+
+
+@pytest.mark.parametrize(
+    ("code", "diff", "started", "gate", "status", "failure", "previous", "expected"),
+    [
+        (0, False, True, None, None, None, None, FailureClass.STALLED),
+        (1, False, True, None, None, None, None, FailureClass.STALLED),
+        (1, False, False, None, None, None, None, FailureClass.INFRASTRUCTURE),
+        (0, False, False, None, None, None, None, FailureClass.INFRASTRUCTURE),
+        (1, True, False, False, None, None, None, FailureClass.IMPLEMENTATION),
+        (0, True, True, False, Status.DONE, None, None, FailureClass.IMPLEMENTATION),
+        (1, True, True, False, None, "check:a", "check:b", FailureClass.IMPLEMENTATION),
+        (1, True, True, False, None, "check:a", "check:a", FailureClass.STALLED),
+        (1, True, True, False, None, "", "", FailureClass.IMPLEMENTATION),
+        (0, True, True, True, Status.DONE, "check:a", "check:a", FailureClass.OK),
+        (0, False, True, None, Status.DONE, None, None, FailureClass.OK),
+        (1, True, True, True, Status.DONE, None, None, FailureClass.STALLED),
+        (0, True, True, None, Status.TODO, None, None, FailureClass.STALLED),
+        (0, True, True, True, Status.IN_PROGRESS, None, None, FailureClass.STALLED),
+        (1, False, True, False, None, "check:a", "check:a", FailureClass.STALLED),
+        (1, True, False, False, Status.BLOCKED, "a", "a", FailureClass.OWNER_DECISION),
+        (0, False, True, None, Status.BLOCKED, None, None, FailureClass.OWNER_DECISION),
+    ],
+)
+def test_evidence_classification(
+    code: int,
+    diff: bool,
+    started: bool,
+    gate: bool | None,
+    status: Status | None,
+    failure: str | None,
+    previous: str | None,
+    expected: FailureClass,
+) -> None:
+    result = CompanionResult(code, "", "")
+    assert (
+        companion.classify(
+            result,
+            has_diff=diff,
+            turn_started=started,
+            gate_passed=gate,
+            ticket_status=status,
+            gate_failure=failure,
+            previous_gate_failure=previous,
+        )
+        is expected
+    )
+
+
+def test_block_takes_precedence_over_capacity() -> None:
+    assert (
+        companion.classify(
+            CompanionResult(1, "usage limit", ""),
+            ticket_status=Status.BLOCKED,
+        )
+        is FailureClass.OWNER_DECISION
+    )
+
+
+def test_capacity_takes_precedence_over_gate_failure() -> None:
+    assert (
+        companion.classify(
+            CompanionResult(1, "usage limit", ""),
+            has_diff=True,
+            gate_passed=False,
+            gate_failure="a",
+            previous_gate_failure="a",
+        )
+        is FailureClass.CAPACITY
+    )
+
+
+def test_output_does_not_establish_completion_or_owner_decision() -> None:
+    assert (
+        companion.classify(
+            CompanionResult(0, "Status: DONE\nStatus: BLOCKED (needs owner decision)", ""),
+        )
+        is FailureClass.STALLED
+    )
+
+
+def test_process_spawn_error_is_inspectable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    path = install(tmp_path, "1.0.0")
+    monkeypatch.setattr(
+        "cc_tandem.companion.subprocess.run", Mock(side_effect=FileNotFoundError("node missing"))
+    )
+    result = companion.run(["task", "prompt"])
+    assert result == CompanionResult(
+        1,
+        "",
+        "node missing",
+        command=("node", str(path), "task", "prompt"),
+        process_error=True,
+    )
+    assert companion.classify(result) is FailureClass.INFRASTRUCTURE
+    # Existing edits and a failed gate still supply implementation evidence.
+    assert (
+        companion.classify(result, has_diff=True, gate_passed=False) is FailureClass.IMPLEMENTATION
+    )
