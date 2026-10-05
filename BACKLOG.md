@@ -68,7 +68,7 @@ Effort: low
 `high` capping, backoff growth and cap, and attempt exhaustion. Property test: the
 effort returned is never below the one passed in.
 
-Status: TODO
+Status: DONE — Typed effort ladder with xhigh rejected, capped escalation and exponential backoff on every retry; 50 tests, 100% coverage.
 
 ---
 
