@@ -40,6 +40,7 @@ up the process. `status --all --json`, per-job `status`, `result` and `cancel`
 read recorded jobs. This double does not implement the companion's review,
 authentication or server lifecycle.
 
-The Python companion layer deliberately classifies exit-zero invalid JSON and
-`no_change` as `ok`. Its `status_all()` rejects invalid JSON. Higher layers must
-check file changes themselves when deciding whether a ticket is complete.
+The Python classifier requires ticket and gate evidence from the caller. A zero
+exit from `invalid_json` or `no_change` alone is `stalled`; a parsed ticket status
+of `DONE` without a failing gate establishes completion. `status_all()` rejects
+invalid JSON.

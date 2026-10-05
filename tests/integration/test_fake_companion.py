@@ -8,6 +8,8 @@ import pytest
 from tests.conftest import FakeCompanion
 
 from cc_tandem import companion
+from cc_tandem.backlog import Status
+from cc_tandem.effort import FailureClass
 
 pytestmark = pytest.mark.integration
 
@@ -18,20 +20,27 @@ TASK = ["task", "--write", "--fresh", "--model", "test-model", "--effort", "medi
     ("scenario", "outcome", "code"),
     [
         ("succeed", "ok", 0),
-        ("fail", "failed", 1),
-        ("usage_limit", "usage_limit", 1),
-        ("exit_nonzero", "failed", 7),
-        ("invalid_json", "ok", 0),
-        ("no_change", "ok", 0),
+        ("fail", "stalled", 1),
+        ("usage_limit", "capacity", 1),
+        ("exit_nonzero", "infrastructure", 7),
+        ("invalid_json", "stalled", 0),
+        ("no_change", "stalled", 0),
     ],
 )
 def test_scenario_classification(
-    fake_companion: FakeCompanion, scenario: str, outcome: companion.Outcome, code: int
+    fake_companion: FakeCompanion, scenario: str, outcome: FailureClass, code: int
 ) -> None:
     fake_companion.configure(scenario)
     result = companion.run(TASK)
     assert result.exit_code == code
-    assert companion.classify(result) == outcome
+    assert (
+        companion.classify(
+            result,
+            turn_started=scenario != "exit_nonzero",
+            ticket_status=Status.DONE if scenario == "succeed" else None,
+        )
+        == outcome
+    )
     assert result.command == ("node", str(fake_companion.script), *TASK)
     if scenario == "invalid_json":
         assert result.json is None
@@ -71,14 +80,14 @@ def test_hang_until_terminated(
     result = companion.run(TASK)
     assert result.exit_code < 0
     assert result.stdout == "Fake task running\n"
-    assert companion.classify(result) == "failed"
+    assert companion.classify(result) == "stalled"
 
 
 def test_success_edits_only_working_directory(fake_companion: FakeCompanion) -> None:
     fake_companion.configure(
         {"scenario": "succeed", "files": {"nested/output.txt": "real content\n"}}
     )
-    assert companion.classify(companion.run(TASK)) == "ok"
+    assert companion.classify(companion.run(TASK), ticket_status=Status.DONE) == "ok"
     assert Path("nested/output.txt").read_text() == "real content\n"
 
 
@@ -87,7 +96,7 @@ def test_no_change_ignores_edits(fake_companion: FakeCompanion) -> None:
     fake_companion.configure(
         {"scenario": "no_change", "files": {"existing.txt": "replacement", "new.txt": "new"}}
     )
-    assert companion.classify(companion.run(TASK)) == "ok"
+    assert companion.classify(companion.run(TASK)) == "stalled"
     assert Path("existing.txt").read_text() == "original"
     assert not Path("new.txt").exists()
 
@@ -96,7 +105,10 @@ def test_cwd_argument(fake_companion: FakeCompanion, tmp_path: Path) -> None:
     target = tmp_path / "other workspace"
     target.mkdir()
     fake_companion.configure({"files": {"output.txt": "target"}})
-    assert companion.classify(companion.run([*TASK, "--cwd", str(target)])) == "ok"
+    assert (
+        companion.classify(companion.run([*TASK, "--cwd", str(target)]), ticket_status=Status.DONE)
+        == "ok"
+    )
     assert (target / "output.txt").read_text() == "target"
     assert not Path("output.txt").exists()
 
@@ -118,7 +130,7 @@ def test_edit_escape_rejected(fake_companion: FakeCompanion, tmp_path: Path, esc
         name = "link.txt"
     fake_companion.configure({"files": {"valid.txt": "also rejected", name: "changed"}})
     result = companion.run(TASK)
-    assert companion.classify(result) == "failed"
+    assert companion.classify(result) == "stalled"
     assert "escapes working directory" in result.stderr
     assert protected.read_text() == "original"
     assert not (tmp_path / "escape.txt").exists()
@@ -146,8 +158,13 @@ def test_retry_sequence(fake_companion: FakeCompanion) -> None:
     fake_companion.configure(
         {"attempts": ["usage_limit", "fail", {"scenario": "succeed", "files": {"done": "yes"}}]}
     )
-    for expected in ("usage_limit", "failed", "ok", "ok"):
-        assert companion.classify(companion.run(TASK)) == expected
+    for expected in ("capacity", "stalled", "ok", "ok"):
+        assert (
+            companion.classify(
+                companion.run(TASK), ticket_status=Status.DONE if expected == "ok" else None
+            )
+            == expected
+        )
     assert Path("done").read_text() == "yes"
     assert len(companion.status_all().recent) == 4
 
@@ -179,11 +196,11 @@ def test_environment_scenario(
 ) -> None:
     monkeypatch.delenv("CC_TANDEM_FAKE_SCENARIO_FILE")
     monkeypatch.setenv("CC_TANDEM_FAKE_SCENARIO", '"usage_limit"')
-    assert companion.classify(companion.run(TASK)) == "usage_limit"
+    assert companion.classify(companion.run(TASK)) == "capacity"
 
 
 def test_unknown_scenario_fails_closed(fake_companion: FakeCompanion) -> None:
     fake_companion.configure("typo")
     result = companion.run(TASK)
-    assert companion.classify(result) == "failed"
+    assert companion.classify(result) == "stalled"
     assert "Unknown fake scenario" in result.stderr

@@ -7,10 +7,12 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
+
+from cc_tandem.backlog import Status
+from cc_tandem.effort import FailureClass
 
 type JsonValue = bool | int | float | str | list[JsonValue] | dict[str, JsonValue] | None
-type Outcome = Literal["ok", "usage_limit", "failed"]
 type VersionKey = tuple[int, int, int, bool, tuple[tuple[int, int | str], ...]]
 
 SEARCH_PATTERN = ".claude/plugins/cache/openai-codex/codex/*/scripts/codex-companion.mjs"
@@ -43,6 +45,7 @@ class CompanionResult:
     json: JsonValue = None
     command: tuple[str, ...] = ()
     dry_run: bool = False
+    process_error: bool = False
 
 
 @dataclass(frozen=True)
@@ -105,7 +108,10 @@ def run(args: Sequence[str]) -> CompanionResult:
         command = ("node", os.environ.get("CC_TANDEM_COMPANION", SEARCH_PATTERN), *args)
         return CompanionResult(0, "", "", command=command, dry_run=True)
     command = ("node", str(locate_companion()), *args)
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    except OSError as error:
+        return CompanionResult(1, "", str(error), command=command, process_error=True)
     try:
         parsed = cast(JsonValue, json.loads(completed.stdout))
     except json.JSONDecodeError:
@@ -115,18 +121,40 @@ def run(args: Sequence[str]) -> CompanionResult:
     )
 
 
-def classify(result: CompanionResult) -> Outcome:
-    """A successful exit is never a usage limit, however the output reads.
+def classify(
+    result: CompanionResult,
+    *,
+    has_diff: bool = False,
+    turn_started: bool = True,
+    gate_passed: bool | None = None,
+    ticket_status: Status | None = None,
+    gate_failure: str | None = None,
+    previous_gate_failure: str | None = None,
+) -> FailureClass:
+    """Classify an ended job using evidence supplied by the lane, never prose intent.
 
-    The pattern matches phrases such as "rate limit" that a successful job may
-    legitimately print (for example while implementing rate limiting). Checking
-    the exit code first keeps that from being retried forever at the same effort.
+    Ticket status comes from the backlog parser, not output mentioning DONE or
+    BLOCKED. Gate failure identifiers must be stable observable check diagnostics;
+    equal non-empty identifiers mean a repeat. Unknown gate results are not passes.
+    A zero exit alone cannot prove completion: DONE plus no failing gate is needed.
+    Dry runs are recorded no-ops. Missing turn evidence defaults conservatively to
+    started, preventing an ordinary no-change job from being called infrastructure.
     """
-    if result.exit_code == 0:
-        return "ok"
-    if USAGE_LIMIT_PATTERN.search(f"{result.stdout}\n{result.stderr}"):
-        return "usage_limit"
-    return "failed"
+    if ticket_status == Status.BLOCKED:
+        return FailureClass.OWNER_DECISION
+    if result.dry_run:
+        return FailureClass.OK
+    if result.exit_code != 0 and USAGE_LIMIT_PATTERN.search(f"{result.stdout}\n{result.stderr}"):
+        return FailureClass.CAPACITY
+    if has_diff and gate_passed is False:
+        if gate_failure and gate_failure == previous_gate_failure:
+            return FailureClass.STALLED
+        return FailureClass.IMPLEMENTATION
+    if not has_diff and (result.process_error or not turn_started):
+        return FailureClass.INFRASTRUCTURE
+    if result.exit_code == 0 and ticket_status == Status.DONE and gate_passed is not False:
+        return FailureClass.OK
+    return FailureClass.STALLED
 
 
 def _status_records(value: JsonValue) -> list[StatusRecord]:
