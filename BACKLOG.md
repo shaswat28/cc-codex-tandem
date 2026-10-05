@@ -234,7 +234,7 @@ Effort: medium
 
 **Acceptance.** `claude plugin validate .` passes in CI. Front-matter test green.
 
-Status: TODO
+Status: DONE — Implemented three thin contract/execution/review skills, parsed front-matter tests and CI plugin validation; make check green (334 tests, 98.94% coverage).
 
 ---
 

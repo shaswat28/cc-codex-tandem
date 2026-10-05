@@ -182,6 +182,9 @@ capacity waits grow their delay while preserving the attempt budget.
 
 ## Development
 
+Install the Claude Code CLI as well; `make check` validates both plugin manifests
+with `claude plugin validate` without logging in or starting a model job.
+
 ```bash
 uv sync
 make check          # ruff + mypy --strict + pytest with a 90% coverage floor

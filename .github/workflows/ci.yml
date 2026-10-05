@@ -11,6 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # A broken manifest means users cannot install the plugin, so the real
+      # validator runs here even though the test skips when it is absent.
+      - name: Set up Node for plugin validation
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install plugin validator
+        run: npm install --global @anthropic-ai/claude-code
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
