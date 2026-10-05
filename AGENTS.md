@@ -60,6 +60,9 @@ make install-hooks  # enable .githooks/commit-msg
   rediscover the same thing. The exception is a **shared interface**: lanes run in
   separate worktrees and cannot negotiate, so any API two tickets both depend on is
   named centrally in the ticket, or their merges will not fit together.
+- **One job per worktree, always.** Confirm ownership before starting a job and
+  before removing a worktree. Two jobs in one worktree stop each other, and a
+  worktree removed under a live job destroys its work.
 - **The aggregate job list under-reports.** `status --all --json` has been observed
   returning an empty `running` list while a job was live. Reconcile against per-job
   status and the worktree, never the aggregate alone.
