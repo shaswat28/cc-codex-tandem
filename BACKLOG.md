@@ -45,7 +45,7 @@ non-numeric directories; no installation found; override set and missing; JSON a
 non-JSON output; non-zero exit; empty/absent `running`/`recent`; usage-limit
 classification; dry-run spawns nothing (assert via a patched spawn).
 
-Status: TODO
+Status: DONE — Typed companion discovery, invocation, status parsing, classification and dry-run; 42 tests, 100% coverage.
 
 ---
 
