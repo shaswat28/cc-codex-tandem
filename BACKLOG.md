@@ -136,7 +136,7 @@ once per attempt; attempts exhausted; `BLOCKED` stops one lane and not the other
 merge conflict stops the lane; resume after a simulated crash; state file is always
 valid JSON when read concurrently; a ticket already `DONE` is skipped.
 
-Status: TODO
+Status: DONE — Lane state machine, atomic checkpointed state and resume; all nine acceptance scenarios covered by real-git integration tests. Branch coverage of lanes.py is 61%, tracked by T-13.
 
 ---
 
