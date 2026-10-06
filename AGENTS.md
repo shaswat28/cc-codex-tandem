@@ -72,12 +72,10 @@ make install-hooks  # enable .githooks/commit-msg
 
 ## Current state
 
-- Feature complete: all of T-01..T-13 are merged. 491 tests, 99% coverage, a
-  per-module coverage floor, and CI green. `tandem doctor` passes against this
-  repository, which now carries its own `.tandem.toml`.
-- Open: T-14 exclusive worktree ownership, T-15 `awaiting_input` outcome,
-  T-16 handing an oversized ticket back for splitting. All three came from
-  running the tool against itself; see `docs/AGENT-LOG.md` for the incident.
-- Paused 2026-10-05. Next repositories are `cc-session-guard` (TypeScript, not
+- T-01..T-15 merged. 541 tests, 99% coverage, per-module floors, CI green.
+  `tandem doctor` passes; the repository carries its own `.tandem.toml`.
+- Open: T-16 only — hand a genuinely oversized ticket back to `/ticket` for
+  splitting. Largely prose plus one lane behaviour and one test.
+- Paused 2026-10-05. Next repositories: `cc-session-guard` (TypeScript, not
   Python) and `cc-afk`.
 - Blocked: nothing.
