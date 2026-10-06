@@ -25,6 +25,7 @@ TASK = ["task", "--write", "--fresh", "--model", "test-model", "--effort", "medi
         ("exit_nonzero", "infrastructure", 7),
         ("invalid_json", "stalled", 0),
         ("no_change", "stalled", 0),
+        ("awaiting_input", "awaiting_input", 0),
     ],
 )
 def test_scenario_classification(

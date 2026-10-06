@@ -303,3 +303,45 @@ def test_process_spawn_error_is_inspectable(
     assert (
         companion.classify(result, has_diff=True, gate_passed=False) is FailureClass.IMPLEMENTATION
     )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (None, None),
+        ({"storedJob": {"result": []}}, None),
+        ({"rawOutput": 1}, None),
+        ({"summary": "Should I retry?", "logs": "Can you help?"}, None),
+        ({"rawOutput": "The URL is https://example.org/?q=1"}, None),
+        ({"rawOutput": "What happened? The setup failed."}, None),
+        ({"rawOutput": "Should I retry?\n1. Retry\n2. Stop"}, "Should I retry?\n1. Retry\n2. Stop"),
+        (
+            {"storedJob": {"result": {"rawOutput": "Which option do you prefer?"}}},
+            "Which option do you prefer?",
+        ),
+        ({"rawOutput": "Please choose an option."}, "Please choose an option."),
+    ],
+)
+def test_only_recorded_operator_questions(
+    payload: companion.JsonValue, expected: str | None
+) -> None:
+    result = CompanionResult(0, "Can you help?", "Should I stop?", json=payload)
+    assert companion.awaiting_question(result) == expected
+    assert companion.classify(result) == (
+        FailureClass.AWAITING_INPUT if expected else FailureClass.STALLED
+    )
+
+
+@pytest.mark.parametrize("status", [Status.DONE, Status.BLOCKED])
+def test_terminal_ticket_takes_precedence_over_question(status: Status) -> None:
+    result = CompanionResult(0, "", "", json={"rawOutput": "Should I retry?"})
+    assert companion.classify(result, ticket_status=status) == (
+        FailureClass.OK if status == Status.DONE else FailureClass.OWNER_DECISION
+    )
+
+
+def test_question_stops_even_with_failing_gate() -> None:
+    result = CompanionResult(0, "", "", json={"rawOutput": "Can you confirm the setup?"})
+    assert (
+        companion.classify(result, has_diff=True, gate_passed=False) == FailureClass.AWAITING_INPUT
+    )

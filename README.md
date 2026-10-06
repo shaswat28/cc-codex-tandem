@@ -159,8 +159,8 @@ effort = "high"
 mechanical edits `low`, ordinary features `medium`, anything architectural `high`.
 
 Failures are classified from exit codes, output markers, worktree changes, actual
-project gate results and parsed ticket status. Prose claiming success or asking for
-help does not decide the class.
+project gate results and parsed ticket status. Prose claiming success does not establish completion. Operator questions are
+detected only in the recorded final message, never summaries or logs.
 
 | Class | Evidence | Retry policy |
 | --- | --- | --- |
@@ -168,11 +168,12 @@ help does not decide the class.
 | `infrastructure` | Process error or no turn started, with no diff | Same effort with backoff |
 | `implementation` | A diff exists and the project gate fails | Same effort once; escalate on a repeat |
 | `stalled` | Job ends without completion or a block, including no diff; same gate failure twice | Escalate one level, capped at `high` |
+| `awaiting_input` | Recorded final message requests operator input without a terminal ticket status | Stop, retain branch, report the question verbatim; no attempt consumed |
 | `owner_decision` | Ticket status is `BLOCKED (needs owner decision)` | Stop; never escalate |
 
 A zero exit alone does not prove completion: the ticket must reach `DONE` without a
 failing gate. A blocked ticket always stops, even if quota markers also appear.
-All results except capacity consume an attempt; retries stop at the attempt limit.
+All results except capacity and awaiting input consume an attempt; retries stop at the attempt limit.
 Capacity is exempt from that budget but not unbounded: a lane gives up after 24
 consecutive quota waits, so a quota that never reopens cannot retry forever.
 Implementation occurrences are tracked separately, so infrastructure errors and

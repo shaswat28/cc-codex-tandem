@@ -104,7 +104,7 @@ async function main() {
   const entry = base.attempts?.[Math.min(state.attempt, base.attempts.length - 1)] ?? base;
   const scenario = typeof entry === "string" ? entry : entry.scenario ?? "succeed";
   const settings = typeof entry === "string" ? base : { ...base, ...entry };
-  const known = ["succeed", "fail", "usage_limit", "hang", "exit_nonzero", "invalid_json", "no_change"];
+  const known = ["succeed", "fail", "usage_limit", "hang", "exit_nonzero", "invalid_json", "no_change", "awaiting_input"];
   if (!known.includes(scenario)) throw new Error(`Unknown fake scenario: ${scenario}`);
   state.attempt++;
   const job = {
@@ -112,6 +112,9 @@ async function main() {
     status: scenario === "hang" ? "running" : ["fail", "usage_limit", "exit_nonzero"].includes(scenario) ? "failed" : "completed",
     summary: scenario === "usage_limit" ? "You've hit your usage limit" : `Fake ${scenario}`,
   };
+  if (scenario === "awaiting_input") {
+    job.result = { rawOutput: settings.question ?? "Should I retry the setup or stop here?\n1. Retry\n2. Stop" };
+  }
   state.jobs.push(job);
   save();
   if (scenario === "succeed") {
@@ -137,7 +140,7 @@ async function main() {
     process.stderr.write("Fake process error\n");
     process.exitCode = 7;
   } else {
-    emit({ jobId: job.id, status: job.status, summary: job.summary });
+    emit({ jobId: job.id, status: job.status, summary: job.summary, ...job.result });
     process.exitCode = job.status === "failed" ? 1 : 0;
   }
 }

@@ -77,8 +77,11 @@ def build_prompt(ticket: Ticket, read_first: Sequence[str], rules: str) -> str:
         "Own implementation, testing and debugging through completion.\n"
         "Work only inside this worktree. Run no git commands.\n"
         "Locate the ticket's Status line by its own heading.\n"
-        "If an owner decision is needed, record options under that ticket and mark it\n"
-        "BLOCKED (needs owner decision). Otherwise pass the project gate before DONE.\n\n"
+        "If a product decision is needed, record options under that ticket and mark it\n"
+        "BLOCKED (needs owner decision). For an environmental or operational surprise,\n"
+        "first try to work around it; if you cannot, record what you observed under\n"
+        "the ticket and stop. Never end by asking a question: this job is detached\n"
+        "and nobody will answer. Otherwise pass the project gate before DONE.\n\n"
         f"{rules}\n"
     )
 
@@ -413,6 +416,9 @@ class Runner:
                 "stdout": result.stdout,
                 "stderr": result.stderr,
                 "checks": [asdict(check) for check in checks],
+                "question": companion.awaiting_question(result)
+                if outcome == FailureClass.AWAITING_INPUT
+                else None,
             },
             indent=2,
         )
@@ -440,7 +446,7 @@ class Runner:
             Phase.COMMITTING
             if outcome == FailureClass.OK
             else Phase.BLOCKED
-            if outcome == FailureClass.OWNER_DECISION
+            if outcome in {FailureClass.OWNER_DECISION, FailureClass.AWAITING_INPUT}
             else Phase.WAITING
             if decision.retry
             else Phase.EXHAUSTED
@@ -456,6 +462,9 @@ class Runner:
             retry_at=deadline if decision.retry else None,
             gate_failure=failure,
             logs=(*record.logs, log),
+            error=companion.awaiting_question(result)
+            if outcome == FailureClass.AWAITING_INPUT
+            else record.error,
             finished_at=timestamp() if phase in _STOPPED else None,
         )
 
