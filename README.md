@@ -1,6 +1,16 @@
 # cc-codex-tandem
 
-A [Claude Code](https://claude.com/claude-code) plugin for the **Claude plans, Codex builds** workflow.
+**Claude plans. Codex builds. In parallel, in isolated git worktrees.**
+
+[![CI](https://github.com/shaswat28/cc-codex-tandem/actions/workflows/ci.yml/badge.svg)](https://github.com/shaswat28/cc-codex-tandem/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)](https://claude.com/claude-code)
+
+A [Claude Code](https://claude.com/claude-code) plugin that turns the
+"two AI coding tools" problem into a pipeline: one model writes the contract and
+reviews the result, the other implements it, and deterministic Python owns the
+parts neither should be guessing at — worktrees, retries, merges and state.
 
 Claude is good at reading a codebase, deciding what to do and judging whether the
 result is right. Codex is good at grinding out the implementation. This plugin wires
@@ -14,7 +24,11 @@ several tickets can run at once without stepping on each other.
                                       /verify-codex ◀────────┘
 ```
 
-> **Status:** early. The command surface below is stable; internals are still moving.
+> **Status: early, and honestly so.** 541 tests at 99% coverage with per-module
+> floors, and `tandem doctor` passes. But every test runs against a fake Codex
+> companion: `tandem run` has not yet been exercised against the real thing
+> end to end, and the skills are verified only for packaging, not behaviour.
+> Treat it as a working prototype, not a dependable tool. See [Roadmap](#roadmap).
 
 ## Why
 
@@ -210,6 +224,27 @@ Tests run against a **fake companion** that speaks the same CLI and JSON, so the
 lane state machine is covered without spending Codex quota. Tests marked `live` are
 excluded by default and never run in CI.
 
+## Roadmap
+
+| | |
+| --- | --- |
+| Next | Hand a genuinely oversized ticket back to `/ticket` for splitting (T-16) |
+| Next | A first real end-to-end run: `tandem run` driving live Codex jobs to a merge |
+| Later | A live fleet dashboard — lanes, ticket board and streaming logs in one view (T-17) |
+| Later | Linux support; it is macOS-only today |
+
+The backlog lives in [`BACKLOG.md`](BACKLOG.md). Several of its tickets were written
+by running this tool against its own repository and watching what broke.
+
+## Contributing
+
+Issues and pull requests welcome. Run `make check` before opening one: it enforces
+lint, formatting, strict types, a 90% global coverage floor and a per-module floor.
+`AGENTS.md` carries the conventions, including the operational rules that came out
+of real failures — one job per worktree, and never trust an agent job list over the
+process table.
+
 ## License
 
-[AGPL-3.0-or-later](LICENSE).
+[AGPL-3.0-or-later](LICENSE). The network-use clause is deliberate: use it, fork it,
+but a hosted service built on it has to stay open too.

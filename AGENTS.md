@@ -74,8 +74,10 @@ make install-hooks  # enable .githooks/commit-msg
 
 - T-01..T-15 merged. 541 tests, 99% coverage, per-module floors, CI green.
   `tandem doctor` passes; the repository carries its own `.tandem.toml`.
-- Open: T-16 only — hand a genuinely oversized ticket back to `/ticket` for
-  splitting. Largely prose plus one lane behaviour and one test.
+- Open: T-16 oversized-ticket handback, T-17 live fleet dashboard.
+- Known gap: every test uses the fake companion. `tandem run` has never driven a
+  real Codex job end to end, and the skills are tested for packaging only, not
+  behaviour. A first live run is the highest-value next step.
 - Paused 2026-10-05. Next repositories: `cc-session-guard` (TypeScript, not
   Python) and `cc-afk`.
 - Blocked: nothing.

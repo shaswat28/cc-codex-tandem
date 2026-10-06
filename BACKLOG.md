@@ -366,3 +366,49 @@ too large for one job.
 stops with a distinguishable "too large" outcome and keeps the branch.
 
 Status: TODO
+
+---
+
+## T-17: A live fleet dashboard
+Effort: high
+
+**Scope.** `src/cc_tandem/ui/`, a new `tandem ui` subcommand.
+
+Reference for the feel: [Scape Argus](https://www.scape.work/argus) — a dark
+three-panel orchestrator view with mission-config cards, a live fleet of agent
+sessions, and the backlog rendered as table, kanban or gantt. Borrow the shape and
+the density, not the look; this is our own tool and should read as its own thing.
+
+Everything it needs already exists. `.tandem/state.json` carries per-ticket phase,
+attempts, effort, timestamps and log paths; `BACKLOG.md` carries the tickets;
+`.tandem.toml` carries the configuration; the lane logs are on disk. **The UI is a
+reader.** It must not drive Codex, mutate the backlog, or become a second source of
+truth, and it must work when no run is active.
+
+Three panels:
+
+- **Config** — `.tandem.toml` as cards: model, effort default, lane count,
+  isolation, base branch, and the queue in order. Read-only in v1.
+- **Fleet** — one tile per lane: current ticket, phase, effort, attempt count,
+  elapsed time, and liveness taken from the worker process, not a job list. A tile
+  opens its lane log, tailed live.
+- **Board** — tickets from `BACKLOG.md` as a table and a kanban by `Status:`.
+  Gantt can wait. Clicking a ticket shows its body and, when it has run, its
+  outcome, retained branch and evidence paths.
+
+Constraints: serve on loopback only, bind to an ephemeral port, no external network
+calls and no CDN assets — vendor anything needed. Dark and light must both work. It
+has to degrade honestly: a missing state file means "no run yet", not an error page,
+and a stale file must be labelled with its age rather than presented as live.
+
+Plenty here is a judgement call — polling versus websockets, how much the board may
+do, whether the whole thing should be a terminal UI instead of a browser one. Decide
+the small ones; put real forks under the ticket as options and block rather than
+guessing.
+
+**Acceptance.** `tandem ui` serves the three panels against a fixture state file;
+tests cover no-state, stale-state, a live run and a finished run; liveness comes
+from the process check; no test or page makes a network request; the server refuses
+a non-loopback bind.
+
+Status: TODO
