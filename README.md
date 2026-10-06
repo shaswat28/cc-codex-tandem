@@ -231,6 +231,7 @@ excluded by default and never run in CI.
 | Next | Hand a genuinely oversized ticket back to `/ticket` for splitting (T-16) |
 | Next | A first real end-to-end run: `tandem run` driving live Codex jobs to a merge |
 | Later | A live fleet dashboard — lanes, ticket board and streaming logs in one view (T-17) |
+| Later | `tandem usage` and a `/codex-usage` skill: what a run actually cost, read from local rollouts (T-18) |
 | Later | Linux support; it is macOS-only today |
 
 The backlog lives in [`BACKLOG.md`](BACKLOG.md). Several of its tickets were written

@@ -74,7 +74,8 @@ make install-hooks  # enable .githooks/commit-msg
 
 - T-01..T-15 merged. 541 tests, 99% coverage, per-module floors, CI green.
   `tandem doctor` passes; the repository carries its own `.tandem.toml`.
-- Open: T-16 oversized-ticket handback, T-17 live fleet dashboard.
+- Open: T-16 oversized-ticket handback, T-17 live fleet dashboard, T-18 Codex
+  usage reporting.
 - Known gap: every test uses the fake companion. `tandem run` has never driven a
   real Codex job end to end, and the skills are tested for packaging only, not
   behaviour. A first live run is the highest-value next step.

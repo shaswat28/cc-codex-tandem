@@ -412,3 +412,59 @@ from the process check; no test or page makes a network request; the server refu
 a non-loopback bind.
 
 Status: TODO
+
+---
+
+## T-18: Show Codex usage without leaving Claude
+Effort: medium
+
+**Scope.** `src/cc_tandem/usage.py`, `skills/codex-usage/SKILL.md`, a
+`tandem usage` subcommand.
+
+Delegating to Codex is only cheap if its cost is visible. Today there is no way to
+see what a run consumed without leaving the session, and `codex` has no usage or
+quota subcommand.
+
+**The data is already on disk** (verified 2026-10-05):
+
+- Rollouts live at `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<session-id>.jsonl`
+  (73 present at the time of writing).
+- Each turn records `payload.turn_token_usage` and `payload.usage` with
+  `input_tokens`, `cached_input_tokens`, `cache_write_input_tokens`,
+  `output_tokens`, `reasoning_output_tokens` and `total_tokens`.
+- A lane job's Codex session id appears in `codex-companion status <job-id>` as
+  "Codex session ID", and that id is in the rollout's filename. Attribution from
+  ticket to job to rollout to token count is therefore possible, and was confirmed
+  by hand: one job summed to 151,744 total tokens, 113,024 of it cached input.
+
+**Trap to resolve first.** `payload.usage` and `payload.turn_token_usage` were
+identical in a single-turn sample. Determine which is cumulative and which is
+per-turn before summing anything, and cover it with a fixture rollout of at least
+three turns. Summing a cumulative field would inflate every number this reports.
+
+Requirements:
+
+- `tandem usage` reports: this repository's lane jobs grouped by ticket, a total for
+  a given day or date range, and a single job by id. Break out cached input, because
+  a run that looks expensive by `total_tokens` may be mostly cache reads.
+- A `/codex-usage` skill that answers "what has Codex cost me" in one call, with no
+  arguments needed for the common case, and renders a compact table.
+- Read **only** rollout files. `~/.codex/auth.json` and
+  `.codex-global-state.json` hold credentials and resume tokens: never read, parse
+  or print them. No network calls.
+- Degrade honestly: no rollouts means "no Codex usage recorded", not an error. A
+  session id with no matching rollout is reported as unattributed rather than
+  dropped silently, so totals never quietly under-report.
+
+**Out of scope, and say so in the output.** This reports *consumption* from local
+rollouts, not *remaining plan allowance*. There is no local source for quota
+headroom; the desktop app fetches that server-side. A line of output must make that
+distinction clear so the number is not mistaken for a budget.
+
+**Acceptance.** Fixture rollouts covering one turn, several turns, a malformed line
+and an empty file; a test proving the cumulative-versus-per-turn question is settled
+rather than assumed; attribution from job id through session id to totals; a test
+asserting no credential file is opened and no network request is made; the
+consumption-not-allowance caveat present in the rendered output.
+
+Status: TODO
