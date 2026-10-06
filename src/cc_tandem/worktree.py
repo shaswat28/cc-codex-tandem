@@ -17,7 +17,8 @@ import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -165,6 +166,122 @@ class DirectoryMutex:
             with self._guard():
                 if self._owner() == (os.getpid(), token):
                     shutil.rmtree(self.path)
+
+
+def worker_alive(job_id: str) -> bool:
+    """Check the worker directly, without trusting companion job listings."""
+    result = subprocess.run(
+        ["pgrep", "-f", rf"task-worker.*--job-id[ =]{re.escape(job_id)}([[:space:]]|$)"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode not in {0, 1}:
+        raise WorktreeError(f"Cannot inspect worker for job {job_id}: {result.stderr.strip()}")
+    return result.returncode == 0
+
+
+@dataclass(frozen=True)
+class JobOwner:
+    job_id: str
+    pid: int
+    started_at: str
+    token: str
+
+
+class OwnershipLock:
+    """A fail-fast reservation that survives a coordinator dying before its worker.
+
+    The guard inode is shared with removal and never deleted. Ownership metadata
+    stays outside the worktree, so it cannot enter a ticket commit.
+    """
+
+    def __init__(self, path: Path, worktree: Path) -> None:
+        self.path = path
+        self.worktree = worktree
+        self.guard = DirectoryMutex(path)
+
+    def _read(self) -> JobOwner | None:
+        try:
+            data = json.loads(self.path.read_text())
+        except FileNotFoundError:
+            return None
+        except (OSError, ValueError) as exc:
+            raise WorktreeError(f"Cannot read ownership lock {self.path}: {exc}") from exc
+        if (
+            not isinstance(data, dict)
+            or not isinstance(data.get("job_id"), str)
+            or not data["job_id"]
+            or type(data.get("pid")) is not int
+            or data["pid"] <= 0
+            or not isinstance(data.get("started_at"), str)
+            or not isinstance(data.get("token"), str)
+        ):
+            raise WorktreeError(f"Invalid ownership lock {self.path}")
+        return JobOwner(data["job_id"], data["pid"], data["started_at"], data["token"])
+
+    def _write(self, owner: JobOwner) -> None:
+        pending = self.path.with_suffix(".tmp")
+        pending.write_text(json.dumps(asdict(owner)))
+        pending.replace(self.path)
+
+    def _pid_alive(self, owner: JobOwner) -> bool:
+        try:
+            os.kill(owner.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def _live(self, owner: JobOwner) -> bool:
+        # The worker wins over a dead coordinator PID or misleading job status.
+        return worker_alive(owner.job_id) or self._pid_alive(owner)
+
+    def _clear_stale(self) -> JobOwner | None:
+        owner = self._read()
+        if owner is not None and not self._live(owner):
+            self.path.unlink()
+            LOGGER.warning("Reclaimed stale ownership lock %s (job %s)", self.path, owner.job_id)
+            return None
+        return owner
+
+    @contextmanager
+    def acquire(self, job_id: str | None = None) -> Iterator[JobOwner]:
+        with self.guard._guard():
+            owner = self._clear_stale()
+            # Resume a known worker after its coordinator died. A live
+            # coordinator must never be joined, even with the same job ID.
+            if owner is not None and (owner.job_id != job_id or self._pid_alive(owner)):
+                raise WorktreeError(f"Worktree {self.worktree} is owned by job {owner.job_id}")
+            if not self.worktree.is_dir():
+                raise WorktreeError(f"Cannot own missing worktree {self.worktree}")
+            claimed = JobOwner(
+                job_id or f"submitting-{uuid.uuid4().hex}",
+                os.getpid(),
+                owner.started_at if owner else datetime.now(UTC).isoformat(),
+                uuid.uuid4().hex,
+            )
+            self._write(claimed)
+        try:
+            yield claimed
+        finally:
+            with self.guard._guard():
+                current = self._read()
+                if (
+                    current is not None
+                    and current.token == claimed.token
+                    and not worker_alive(current.job_id)
+                ):
+                    self.path.unlink()
+
+    def set_job(self, owner: JobOwner, job_id: str) -> None:
+        """Publish the companion ID before any polling or checkpoint write."""
+        with self.guard._guard():
+            current = self._read()
+            if current is None or current.token != owner.token:
+                raise WorktreeError("Worktree ownership changed during submission")
+            self._write(JobOwner(job_id, current.pid, current.started_at, current.token))
 
 
 class WorktreeManager:
@@ -315,10 +432,19 @@ class WorktreeManager:
             self._ticket_checkout(path, ticket)
             return self._merge(self.repo, ticket, ticket, "merge")
 
-    def remove(self, ticket: str) -> None:
-        """Remove a clean worktree, retaining its branch; missing is a no-op."""
+    def ownership(self, ticket: str) -> OwnershipLock:
+        """Return the same ownership lock from every checkout of this repository."""
         path = self.path_for(ticket)
-        with self.mutex.acquire():
+        return OwnershipLock(self.mutex.path.parent / "tandem-owners" / f"{ticket}.json", path)
+
+    def remove(self, ticket: str, *, override: bool = False) -> None:
+        """Remove a clean worktree; live ownership requires an explicit override."""
+        path = self.path_for(ticket)
+        ownership = self.ownership(ticket)
+        with ownership.guard._guard(), self.mutex.acquire():
+            owner = ownership._clear_stale()
+            if owner is not None and not override:
+                raise WorktreeError(f"Worktree {path} is owned by job {owner.job_id}")
             records = self._worktrees()
             if path not in records:
                 if path.exists():
@@ -326,4 +452,6 @@ class WorktreeManager:
                 return
             if records[path] != ticket:
                 raise WorktreeError(f"Worktree at {path} is not on ticket branch {ticket}")
-            _git(self.repo, "worktree", "remove", str(path))
+            _git(self.repo, "worktree", "remove", *(["--force"] if override else []), str(path))
+            if override:
+                ownership.path.unlink(missing_ok=True)

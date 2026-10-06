@@ -536,3 +536,30 @@ def test_lock_owned_by_an_unsignalable_process_is_not_reclaimed(
     with pytest.raises(worktree.LockTimeoutError), mutex.acquire():
         pass  # pragma: no cover - the lock must not be granted
     assert (mutex.path / "owner.json").exists()
+
+
+def test_owned_worktree_survives_removal_and_override_is_explicit(
+    manager: WorktreeManager,
+) -> None:
+    path = manager.create("T-01")
+    lock = manager.ownership("T-01")
+    with lock.acquire("live-job"):
+        with pytest.raises(WorktreeError, match="live-job"):
+            manager.remove("T-01")
+        assert path.exists()
+        (path / "shared.txt").write_text("uncommitted")
+        manager.remove("T-01", override=True)
+        assert not path.exists()
+        assert not lock.path.exists()
+
+
+def test_removal_reclaims_stale_ownership(manager: WorktreeManager) -> None:
+    path = manager.create("T-01")
+    lock = manager.ownership("T-01")
+    lock.path.parent.mkdir()
+    (lock.path).write_text(
+        json.dumps({"pid": dead_pid(), "job_id": "dead-job", "started_at": "then", "token": "old"})
+    )
+    manager.remove("T-01")
+    assert not path.exists()
+    assert not lock.path.exists()

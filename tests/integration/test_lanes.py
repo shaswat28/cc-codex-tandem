@@ -20,7 +20,7 @@ from cc_tandem.config import CodexConfig, Config, LanesConfig, PromptConfig, Que
 from cc_tandem.effort import Effort
 from cc_tandem.lanes import LaneError, Runner, build_prompt, inside
 from cc_tandem.state import Phase, StateStore, TicketState, timestamp
-from cc_tandem.worktree import WorktreeManager
+from cc_tandem.worktree import WorktreeError, WorktreeManager
 
 pytestmark = pytest.mark.integration
 RULES = "**Rules for every ticket.** Work only in your worktree. Pass the gate.\n\n---\n\n"
@@ -614,3 +614,42 @@ def test_launch_capacity_error_waits_and_retries_same_effort(
     assert efforts == [Effort.LOW, Effort.LOW]
     sleep.assert_called_once()
     assert 0 < sleep.call_args.args[0] <= 1
+
+
+def test_second_submission_never_launches_into_owned_worktree(
+    repository: WorktreeManager, jobs: Jobs
+) -> None:
+    run = runner(repository)
+    path = repository.create("T-01")
+    with repository.ownership("T-01").acquire("existing-job"):
+        saved = run.run()["T-01"]
+        assert saved.phase == Phase.FAILED
+        assert "existing-job" in (saved.error or "")
+        assert jobs.calls == []
+        assert path.exists()
+
+
+def test_ownership_is_published_before_poll_and_held_for_job(
+    repository: WorktreeManager, jobs: Jobs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = runner(repository)
+    call = run._call
+    polled: list[str] = []
+
+    def inspect(args: Sequence[str]) -> CompanionResult:
+        lock = repository.ownership("T-01")
+        if args[0] == "task":
+            assert json.loads(lock.path.read_text())["job_id"].startswith("submitting-")
+        elif args[0] == "status":
+            polled.append(args[1])
+            assert json.loads(lock.path.read_text())["job_id"] == args[1]
+            with pytest.raises(WorktreeError, match=args[1]):
+                repository.remove("T-01")
+            with pytest.raises(WorktreeError, match=args[1]), lock.acquire():
+                pytest.fail("A second job cannot start while polling")
+        return call(args)
+
+    monkeypatch.setattr(run, "_call", inspect)
+    assert run.run()["T-01"].phase == Phase.DONE
+    assert polled
+    assert not repository.ownership("T-01").path.exists()
