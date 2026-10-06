@@ -53,6 +53,7 @@ def test_unknown_difficulty() -> None:
         (FailureClass.IMPLEMENTATION, True, False, 1),
         (FailureClass.STALLED, True, True, 1),
         (FailureClass.OWNER_DECISION, False, False, 1),
+        (FailureClass.AWAITING_INPUT, False, False, 0),
     ],
 )
 def test_transitions(
@@ -75,7 +76,9 @@ def test_exhaustion(outcome: FailureClass, attempt: int) -> None:
     decision = next_attempt(outcome, Effort.LOW, attempt)
     assert decision.retry == (outcome == FailureClass.CAPACITY)
     assert decision.effort == Effort.LOW
-    assert decision.attempt == attempt + (outcome != FailureClass.CAPACITY)
+    assert decision.attempt == attempt + (
+        outcome not in {FailureClass.CAPACITY, FailureClass.AWAITING_INPUT}
+    )
 
 
 @pytest.mark.parametrize("effort", list(Effort))
@@ -90,7 +93,7 @@ def test_owner_decision_never_escalates(effort: Effort, attempt: int) -> None:
 @pytest.mark.parametrize("outcome", list(FailureClass))
 def test_attempt_accounting(outcome: FailureClass) -> None:
     assert next_attempt(outcome, Effort.LOW, 1).attempt == (
-        1 if outcome == FailureClass.CAPACITY else 2
+        1 if outcome in {FailureClass.CAPACITY, FailureClass.AWAITING_INPUT} else 2
     )
 
 
@@ -269,3 +272,15 @@ def test_a_non_capacity_result_does_not_increment_the_wait_counter() -> None:
 def test_max_capacity_waits_must_be_positive() -> None:
     with pytest.raises(ValueError, match="max_capacity_waits"):
         next_attempt(FailureClass.CAPACITY, Effort.LOW, 0, max_capacity_waits=0)
+
+
+@pytest.mark.parametrize("effort", list(Effort))
+@pytest.mark.parametrize("attempt", [0, 2, 99])
+def test_awaiting_input_preserves_all_counters(effort: Effort, attempt: int) -> None:
+    assert next_attempt(
+        FailureClass.AWAITING_INPUT,
+        effort,
+        attempt,
+        implementation_failures=2,
+        backoff_count=4,
+    ) == Decision(False, effort, attempt, 2, 0, 4)

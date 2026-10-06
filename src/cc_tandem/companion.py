@@ -121,6 +121,35 @@ def run(args: Sequence[str]) -> CompanionResult:
     )
 
 
+def final_output(result: CompanionResult) -> str | None:
+    """Read only the task's recorded final message, never summaries or logs."""
+    if not isinstance(result.json, dict):
+        return None
+    stored = result.json.get("storedJob")
+    payload = stored.get("result") if isinstance(stored, dict) else result.json
+    if not isinstance(payload, dict):
+        return None
+    output = payload.get("rawOutput")
+    return output if isinstance(output, str) else None
+
+
+def awaiting_question(result: CompanionResult) -> str | None:
+    """Recognise an operator-directed request and preserve its full final message."""
+    output = final_output(result)
+    if output is None:
+        return None
+    # Require an operator-directed question or an explicit request for a choice.
+    # A question mark in code, a URL, or an explanatory heading is not enough.
+    question = re.search(
+        r"(?:^|[\n.!]\s*)(?:can|could|would|will|should|do)\s+(?:you|I|we)\b[^?]*\?"
+        r"|(?:^|[\n.!]\s*)(?:which|what|how)\b[^?]*\b(?:you|your|I|we)\b[^?]*\?"
+        r"|\bplease\s+(?:choose|select|confirm|decide|tell me)\b",
+        output,
+        re.IGNORECASE,
+    )
+    return output if question else None
+
+
 def classify(
     result: CompanionResult,
     *,
@@ -146,6 +175,8 @@ def classify(
         return FailureClass.OK
     if result.exit_code != 0 and USAGE_LIMIT_PATTERN.search(f"{result.stdout}\n{result.stderr}"):
         return FailureClass.CAPACITY
+    if ticket_status != Status.DONE and awaiting_question(result) is not None:
+        return FailureClass.AWAITING_INPUT
     if has_diff and gate_passed is False:
         if gate_failure and gate_failure == previous_gate_failure:
             return FailureClass.STALLED

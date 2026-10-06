@@ -16,7 +16,8 @@ fake_companion.configure({
 ```
 
 Scenarios: `succeed`, `fail`, `usage_limit`, `hang`, `exit_nonzero`,
-`invalid_json`, `no_change`. Only `succeed` applies file edits. Paths are relative
+`invalid_json`, `no_change`, `awaiting_input`. The latter records an operator
+question in `storedJob.result.rawOutput`; configure `question` to override it. Only `succeed` applies file edits. Paths are relative
 to the working directory (or `--cwd`); absolute paths, traversal and symlink
 escapes are rejected before any file is edited.
 

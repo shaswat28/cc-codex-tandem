@@ -11,6 +11,7 @@ from cc_tandem.effort import Effort
 from cc_tandem.lanes import LaneError, Runner, _git_output, _rules
 from cc_tandem.state import Phase, StateStore, TicketState
 from cc_tandem.worktree import WorktreeManager
+from tests.conftest import FakeCompanion
 
 
 def make_runner(tmp_path: Path) -> Runner:
@@ -157,3 +158,46 @@ def test_publish_rejects_nonfinishing_phase(tmp_path: Path) -> None:
     run._checkout = Mock(return_value=tmp_path)  # type: ignore[method-assign]
     with pytest.raises(LaneError, match="Cannot finish"):
         run._publish(TicketState("T-01", 0, Effort.LOW, "now", "now", phase=Phase.PENDING))
+
+
+def test_question_stops_lane_and_is_reported_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, offline_companion: FakeCompanion
+) -> None:
+    import json
+
+    from cc_tandem import companion
+    from cc_tandem.backlog import Status, Ticket
+    from cc_tandem.lanes import build_prompt
+
+    question = "Setup is unavailable. Should I retry or stop?\n1. Retry\n2. Stop\n"
+    offline_companion.configure({"scenario": "awaiting_input", "question": question})
+    run = make_runner(tmp_path)
+    ticket = Ticket("T-01", "Example", Effort.LOW, "Implement.", Status.TODO)
+    monkeypatch.setattr(run, "_ticket", Mock(return_value=ticket))
+    monkeypatch.setattr(run, "_checkout", Mock(return_value=tmp_path))
+    monkeypatch.setattr("cc_tandem.lanes._diff", Mock(return_value=False))
+    record = run.store.put(
+        TicketState("T-01", 0, Effort.LOW, "2026-10-05T00:00:00+00:00", "2026-10-05T00:00:00+00:00")
+    )
+    launched = companion.run(["task", "--background", "Example"])
+    assert isinstance(launched.json, dict)
+    job_id = launched.json["jobId"]
+    assert isinstance(job_id, str)
+    from dataclasses import replace
+
+    record = run.store.put(replace(record, phase=Phase.RUNNING, job_id=job_id))
+    result = run._await_job(record)
+    stopped = run._evaluate(record, result)
+    assert stopped.phase == Phase.BLOCKED
+    assert stopped.effort == Effort.LOW and stopped.attempts == 0
+    assert stopped.error == question and stopped.retry_at is None
+    assert stopped.finished_at is not None
+    report = json.loads(Path(stopped.logs[0]).read_text())
+    assert report["outcome"] == "awaiting_input" and report["question"] == question
+    assert run._run_ticket(stopped) == stopped
+    assert json.loads(offline_companion.state_file.read_text())["attempt"] == 1
+    assert isinstance(run.manager.remove, Mock)
+    run.manager.remove.assert_not_called()
+    prompt = build_prompt(ticket, (), "Rules")
+    assert "product decision" in prompt and "environmental or operational" in prompt
+    assert "Never end by asking a question" in prompt

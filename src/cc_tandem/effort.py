@@ -36,6 +36,7 @@ class FailureClass(StrEnum):
     IMPLEMENTATION = "implementation"
     STALLED = "stalled"
     OWNER_DECISION = "owner_decision"
+    AWAITING_INPUT = "awaiting_input"
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,7 @@ def next_attempt(
 ) -> Decision:
     """Apply a result to counters from *before* this invocation (initially zero).
 
-    Capacity preserves the attempt budget, even at its limit. Every other result
+    Capacity and awaiting input preserve the attempt budget, even at its limit. Other results
     consumes an attempt, including success and owner decisions. Track prior
     implementation failures independently of attempts: infrastructure and capacity
     must not cause the first implementation failure to escalate. Pass the returned
@@ -101,6 +102,8 @@ def next_attempt(
     if max_capacity_waits < 1:
         raise ValueError("max_capacity_waits must be at least 1")
     result = FailureClass(outcome)
+    if result == FailureClass.AWAITING_INPUT:
+        return Decision(False, effort, attempt, implementation_failures, 0, backoff_count)
     counted = attempt + (result != FailureClass.CAPACITY)
     failures = implementation_failures + (result == FailureClass.IMPLEMENTATION)
     waits = backoff_count + (result == FailureClass.CAPACITY)

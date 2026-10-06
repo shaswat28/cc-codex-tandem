@@ -342,7 +342,7 @@ escalating reasoning cannot answer an environmental question.
 classified `awaiting_input`; a test asserts effort is unchanged and the attempt
 budget is not consumed; the question text reaches the lane report.
 
-Status: TODO
+Status: DONE — Recorded final operator questions stop the lane as awaiting_input, retain the branch and verbatim report, and preserve effort and attempts; 521 tests and make check green.
 
 ---
 
