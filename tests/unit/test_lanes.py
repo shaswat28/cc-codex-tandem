@@ -157,3 +157,27 @@ def test_publish_rejects_nonfinishing_phase(tmp_path: Path) -> None:
     run._checkout = Mock(return_value=tmp_path)  # type: ignore[method-assign]
     with pytest.raises(LaneError, match="Cannot finish"):
         run._publish(TicketState("T-01", 0, Effort.LOW, "now", "now", phase=Phase.PENDING))
+
+
+@pytest.mark.parametrize("reported", ["missing", "completed"])
+def test_live_worker_outweighs_missing_or_terminal_companion_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reported: str
+) -> None:
+    run = make_runner(tmp_path)
+    early = (
+        CompanionResult(1, "No job found", "")
+        if reported == "missing"
+        else CompanionResult(0, "", "", json={"job": {"status": "completed"}})
+    )
+    run._call = Mock(  # type: ignore[method-assign]
+        side_effect=[
+            early,
+            CompanionResult(0, "", "", json={"job": {"status": "completed"}}),
+            CompanionResult(0, "finished", ""),
+        ]
+    )
+    monkeypatch.setattr("cc_tandem.lanes.worker_alive", Mock(side_effect=[True, False]))
+    record = TicketState("T-01", 0, Effort.LOW, "now", "now", job_id="job")
+    assert run._await_job(record).stdout == "finished\n"
+    assert isinstance(run.sleep, Mock)
+    run.sleep.assert_called_once_with(run.poll_seconds)

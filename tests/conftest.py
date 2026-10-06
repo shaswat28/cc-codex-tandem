@@ -24,6 +24,10 @@ class FakeCompanion:
 @pytest.fixture(autouse=True)
 def offline_companion(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> FakeCompanion:
     """Default every test to the fake; discovery unit tests can override this."""
+    # The fake has no task-worker process; process-list access can also be
+    # sandboxed. Individual ownership tests explicitly simulate live workers.
+    monkeypatch.setattr("cc_tandem.worktree.worker_alive", lambda _: False)
+    monkeypatch.setattr("cc_tandem.lanes.worker_alive", lambda _: False)
     fake = FakeCompanion(
         Path(__file__).parent / "fakes" / "fake_companion.mjs",
         tmp_path / "scenario.json",

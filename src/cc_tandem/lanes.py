@@ -26,7 +26,7 @@ from cc_tandem.companion import CompanionResult
 from cc_tandem.config import Config, QueueEntry
 from cc_tandem.effort import Effort, FailureClass, next_attempt
 from cc_tandem.state import Phase, StateStore, TicketState, timestamp
-from cc_tandem.worktree import DirectoryMutex, WorktreeManager
+from cc_tandem.worktree import DirectoryMutex, WorktreeManager, worker_alive
 
 _STOPPED = {Phase.BLOCKED, Phase.CONFLICT, Phase.EXHAUSTED, Phase.FAILED}
 _COMPLETE = {Phase.DONE, Phase.SKIPPED}
@@ -216,8 +216,6 @@ class Runner:
         self.store._contained(self.store.path.parent / "run.lock")
         self.store._contained(self.store.path.parent / "run.lock.guard")
         with DirectoryMutex(self.store.path.parent / "run.lock", timeout=0).acquire():
-            with self._companion_lock:
-                companion.status_all()
             existing = self.store.read()
             for lane, queue in enumerate(lanes):
                 for entry in queue:
@@ -252,7 +250,8 @@ class Runner:
             if record.phase in _COMPLETE:
                 return record
             if record.phase == Phase.RUNNING:
-                self._await_job(record)
+                with self.manager.ownership(record.ticket).acquire(record.job_id):
+                    self._await_job(record)
             # After a merge crash, do not discard the still-pending audit entry.
             if record.phase in _FINISHING:
                 return self._finish(record)
@@ -310,39 +309,45 @@ class Runner:
                     self.config.prompt.read_first,
                     _rules(inside(path, "BACKLOG.md").read_text(encoding="utf-8")),
                 )
-                record = self._change(record, Phase.SUBMITTING, job_id=None)
-                launched = self._call(
-                    [
-                        "task",
-                        "--write",
-                        "--fresh",
-                        "--background",
-                        "--cwd",
-                        str(path),
-                        "--model",
-                        self.config.codex.model,
-                        "--effort",
-                        record.effort,
-                        prompt,
-                    ]
-                )
-                if launched.dry_run:
-                    raise LaneError("Dry run cannot execute or complete a lane")
-                job = launched.json.get("jobId") if isinstance(launched.json, dict) else None
-                if launched.exit_code or not isinstance(job, str) or not job:
-                    record = self._evaluate(record, launched)
-                    if record.phase in _STOPPED:
-                        return record
-                    if record.phase in _FINISHING:
-                        return self._finish(record)
-                    continue
-                record = self._change(record, Phase.RUNNING, job_id=job)
-            result = self._await_job(record)
+                record, result = self._submit(record, path, prompt)
+            else:
+                with self.manager.ownership(record.ticket).acquire(record.job_id):
+                    result = self._await_job(record)
             record = self._evaluate(record, result)
             if record.phase in _FINISHING:
                 return self._finish(record)
             if record.phase in _STOPPED:
                 return record
+
+    def _submit(
+        self, record: TicketState, path: Path, prompt: str
+    ) -> tuple[TicketState, CompanionResult]:
+        ownership = self.manager.ownership(record.ticket)
+        with ownership.acquire() as owner:
+            record = self._change(record, Phase.SUBMITTING, job_id=None)
+            launched = self._call(
+                [
+                    "task",
+                    "--write",
+                    "--fresh",
+                    "--background",
+                    "--cwd",
+                    str(path),
+                    "--model",
+                    self.config.codex.model,
+                    "--effort",
+                    record.effort,
+                    prompt,
+                ]
+            )
+            if launched.dry_run:
+                raise LaneError("Dry run cannot execute or complete a lane")
+            job = launched.json.get("jobId") if isinstance(launched.json, dict) else None
+            if launched.exit_code or not isinstance(job, str) or not job:
+                return record, launched
+            ownership.set_job(owner, job)
+            record = self._change(record, Phase.RUNNING, job_id=job)
+            return record, self._await_job(record)
 
     def _await_job(self, record: TicketState) -> CompanionResult:
         if record.job_id is None:
@@ -350,6 +355,9 @@ class Runner:
         while True:
             result = self._call(["status", record.job_id, "--json"])
             job = result.json.get("job") if isinstance(result.json, dict) else None
+            if worker_alive(record.job_id):
+                self.sleep(self.poll_seconds)
+                continue
             if result.exit_code or not isinstance(job, dict):
                 raise LaneError(
                     f"Cannot reconcile job {record.job_id}: {result.stdout} {result.stderr}"

@@ -314,7 +314,7 @@ Neither was a failure of the ticket or the model; both were avoidable collisions
 owner's id; a test removing an owned worktree is refused and the worktree survives;
 a stale lock whose pid is gone is reclaimed; the override path is tested.
 
-Status: TODO
+Status: DONE — Exclusive job ownership, process-based liveness, stale-lock recovery and explicit removal override; 511 tests and make check pass.
 
 ---
 
