@@ -26,6 +26,8 @@ coverage.json
 
 # uv
 uv.lock.bak
+# Lane-local cache: the default cache is outside a job's writable sandbox.
+.uv-cache/
 
 # Node (fake companion fixtures / codex companion scratch)
 node_modules/

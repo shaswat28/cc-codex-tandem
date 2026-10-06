@@ -32,6 +32,9 @@ make check          # ruff + ruff format --check + mypy --strict + pytest --cov 
 make install-hooks  # enable .githooks/commit-msg
 ```
 
+- A sandboxed lane cannot write uv's default cache (`~/.cache/uv`). Warm the
+  worktree's `.venv` before launching a job, and have the job export
+  `UV_CACHE_DIR=.uv-cache` so every write stays inside the worktree.
 - Tests marked `live` need a real Codex login and burn quota. They are excluded from
   `make check` and must never run in CI.
 - Everything else runs against `tests/fakes/fake_companion.mjs`. Never call the real
