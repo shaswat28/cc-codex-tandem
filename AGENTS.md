@@ -74,8 +74,12 @@ make install-hooks  # enable .githooks/commit-msg
 
 - T-01..T-15 merged. 541 tests, 99% coverage, per-module floors, CI green.
   `tandem doctor` passes; the repository carries its own `.tandem.toml`.
-- Open: T-16 oversized-ticket handback, T-17 live fleet dashboard, T-18 Codex
-  usage reporting.
+- Open: T-16..T-18, plus T-19..T-38 from a Codex codebase review on 2026-10-06.
+- **`tandem run` is broken as written (T-19).** The launch omits `--json` while the
+  code parses a JSON `jobId`; companion 1.0.6 prints text, so no job is ever
+  tracked. Fix T-19, T-20 and T-21 before anything else, and before claiming the
+  runner works. T-25 and T-26 are the next most serious: ownership is released
+  before the gate and merge, and base can change between verification and merge.
 - Known gap: every test uses the fake companion. `tandem run` has never driven a
   real Codex job end to end, and the skills are tested for packaging only, not
   behaviour. A first live run is the highest-value next step.
